@@ -1,8 +1,11 @@
 @echo off
-:: Script `.\%GAME_TITLE%EspCleaner.bat`
+:: Script `.\OblivionEspCleaner.bat`
 
 :: Constants
 set "GAME_TITLE=Oblivion"
+set "XEditVariant=TES4Edit"
+set "AutoCleanExe=TES4EditQuickAutoClean.exe"
+set "XEditUrl=https://www.nexusmods.com/oblivion/mods/11536"
 
 :: admin check
 net session >nul 2>&1 || (
@@ -38,11 +41,13 @@ if not defined PSCMD (
 echo [OK] PowerShell located            & timeout /t 1 >nul
 
 :: exe exists
-if not exist "TES4EditQuickAutoClean.exe" (
-    echo TES4EditQuickAutoClean.exe missing
+if not exist "%AutoCleanExe%" (
+    echo Missing: %AutoCleanExe%
+    echo Place %AutoCleanExe% in script Dir.
+    echo Download from: %XEditUrl%
     pause & exit /b 1
 )
-echo [OK] TES4EditQuickAutoClean.exe   & timeout /t 1 >nul
+echo [OK] %AutoCleanExe%   & timeout /t 1 >nul
 
 :: data folder
 if not exist "..\Data" (
