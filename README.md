@@ -2,7 +2,7 @@
 Status: Alpha
 
 ### Description
-Its P.A.C.T. for ALL BETHESDA GAMES compatible with xEdit....!!! 
+Its P.A.C.T. for ALL BETHESDA GAMES compatible with Auto-Clean versions of xEdit....!!! 
 
 ### Preview
 - Its doing it..
