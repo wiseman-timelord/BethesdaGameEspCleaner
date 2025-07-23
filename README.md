@@ -2,7 +2,7 @@
 Status: Alpha
 
 ### Description
-Its P.A.C.T. for ALL BETHESDA GAMES compatible with xEdit....!!!
+Its P.A.C.T. for ALL BETHESDA GAMES compatible with xEdit....!!! 
 
-### Further details 
-T.B.A
+### Plan
+Currently its branded towards the testing platform Oblivion, but for GitHub will be special generic branded one, before that it must work how I want.  
