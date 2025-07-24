@@ -2,7 +2,7 @@
 Status: Alpha
 
 ### Description
-Its P.A.C.T. for ALL BETHESDA GAMES compatible with Auto-Clean versions of xEdit....!!! For those whom may not know, this enables cleaning of Esps that one may have as part of a large mod collection, which in-turn prevents random, crashes and issues, from uncleaned mods. The user may put 1 xEdit Auto-Clean in both ".\Thread#" folder, thus enabling dual-thread parallel processing of Esps, which is necessary for obvious reasons "it takes half the time", but The user may also install only to the first thread folder, in which case it will run in single thread (advised if you only have <50 mods).
+Its P.A.C.T. for ALL BETHESDA GAMES compatible with Auto-Clean versions of xEdit....!!! For those whom may not know, this enables cleaning of Esps that one may have as part of a large mod collection, which in-turn prevents random, crashes and issues, from uncleaned mods. The user may put 1 xEdit Auto-Clean in both ".\Thread#" folder, thus enabling dual-thread parallel processing of Esps, which is necessary for obvious reasons "it takes half the time", but as more ".\Thread#` folders are setup by the user and utilized, it becomes more frequently to occasionally pop, the ok button on chance that load with no esp selected, 1/100 chance of this. if install only to the first thread folder, in which case it will run in single thread.
 
 ### Preview
 - The new dual-thread version (Yes its 2x faster than P.A.C.T.)...
