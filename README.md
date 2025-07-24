@@ -77,3 +77,6 @@ Thread1 = 7, Thread2 = 4, Completed/Total = 11/49
 
 ### Notation
 - This version is configured for **The Elder Scrolls IV: Oblivion**, but, can be adapted for and will be released on, other xEdit-Autoclean supported games like Skyrim, Fallout 3, and New Vegas.
+
+### Warnings
+- **Epilepsy Warning** the program will produce flashes as the AutoClean.exe applications repeatingly fire onto the display. Its on the level of the Retena Exam in Fallout 4!! You have been warned.
