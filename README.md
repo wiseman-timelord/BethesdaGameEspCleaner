@@ -2,7 +2,7 @@
 Status: Alpha
 
 ### Description
-Its P.A.C.T. for ALL BETHESDA GAMES compatible with Auto-Clean versions of xEdit....!!! 
+Its P.A.C.T. for ALL BETHESDA GAMES compatible with Auto-Clean versions of xEdit....!!! Its shaping up that the user may put 1 xEdit Auto-Clean in each ".\Thread" folder, thus enabling dual thread processing of Esps.
 
 ### Preview
 - The new dual-thread version (Yes its 2x faster than P.A.C.T.)...
