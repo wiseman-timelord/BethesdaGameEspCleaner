@@ -171,7 +171,7 @@ function Wait-ForThreadsToComplete($totalTasks) {
 # MAIN
 Clear-Host
 Write-Separator
-Write-Host "    $GameTitle Esp Cleaner (Task Queue with $ThreadCount thread(s))" -ForegroundColor Cyan
+Write-Host "    $GameTitle Esp Cleaner" -ForegroundColor Cyan
 Write-Separator
 Write-Host ""
 
