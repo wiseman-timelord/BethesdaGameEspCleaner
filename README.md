@@ -78,13 +78,17 @@ Done:
 ```
 
 ### Structure:
-* Program...
+- Program...
+```
 .\OblivionEspCleaner.bat
 .\oec_powershell.ps1
-.\oec_thread1.ps1
-.\oec_thread2.ps1
-.\Thread1\*  <--- Single/First AutoCleaner.exe install
-.\Thread2 \* <--- Second/None AutoCleaner.exe install
+.\oec_thread.ps1
+```
+- Additions After install.
+```
+.\TES4Edit #.#.#*\*  # <--- lateset TES4Edit expanded, folder contained moved.
+.\Thread#\*  # <--- sequential folders with word thread for replication of AutoClean exe.
+```
 
 ### Plan
 Currently its branded towards the testing platform Oblivion, but for GitHub will be special generic branded one, before that it must work how I want. There will be game braned versions for each game I can cover featured on NexusMods.
