@@ -1,11 +1,22 @@
+Got it! Here's your revised and logically structured `README.md` with **Description**, then **Installation & Instructions** combined into a single step-by-step numbered section, as requested.
+
+---
+
 # BethesdaGameEspCleaner
-Status: Alpha
+**Status:** Beta
 
 ### Description
-Its P.A.C.T. for ALL BETHESDA GAMES compatible with Auto-Clean versions of xEdit....!!! For those whom may not know, this enables cleaning of Esps that one may have as part of a large mod collection, which in-turn prevents random, crashes and issues, from uncleaned mods. The user may put 1 xEdit Auto-Clean in both ".\Thread#" folder, thus enabling dual-thread parallel processing of Esps, which is necessary for obvious reasons "it takes half the time", but as more ".\Thread#` folders are setup by the user and utilized, it becomes more frequently to occasionally pop, the ok button on chance that load with no esp selected, 1/100 chance of this. if install only to the first thread folder, in which case it will run in single thread.
+A multi-threaded ESP cleaning utility similar to the concept of "P.A.C.T" for Fallout 4, but now for all AutoCleaner supported Bethesda games using xEdit's Auto-Clean. This tool automates the cleaning process using parallel instances of xEdit specifically made for relating game (ie TES4Edit for Oblivion), significantly reducing time and effort when working with large mod lists. For those whom may not know, this enables cleaning of Esps that one may have as part of a large mod collection, which in-turn prevents random, crashes and issues, from uncleaned mods. 
+
+**Features:**
+* 1–4 thread parallel cleaning using xEdit-AutoCleaner
+* Auto-blacklist to skip recently cleaned ESPs
+* Error logging and real-time progress
+* Automatic xEdit setup on first run
+* Designed for future multi-game support
 
 ### Preview
-- The new dual-thread version (Yes its 2x faster than P.A.C.T.)...
+- In Dual-Thread mode (sensible number)...
 ```
 ===============================================================================
     Oblivion Esp Cleaner
@@ -30,51 +41,6 @@ Thread1 = 5, Thread2 = 4, Completed/Total = 9/49
 Thread1 = 6, Thread2 = 4, Completed/Total = 10/49
 Thread1 = 7, Thread2 = 4, Completed/Total = 11/49
 ...
-...
-```
-- Its doing it (single thread version)..
-```
-===============================================================================
-    Oblivion Esp Cleaner
-===============================================================================
-
-Cleaning SM Plugin Refurbish Lite.esp... SUCCESS
-Cleaning Smarter Ally Combat Positioning.esp... SUCCESS
-Cleaning Spell Delete And Item Remove.esp... SUCCESS
-Cleaning StoneMarkers.esp... SUCCESS
-Cleaning TestAutoSheathWeapon.esp... SUCCESS
-Cleaning The Player Random Conversation System.esp... SUCCESS
-Cleaning Toaster Says Share Faction Recruitment.esp... SUCCESS
-Cleaning Travelers of Cyrodiil.esp... SUCCESS
-Cleaning Tropical Cyrodiil.esp... SUCCESS
-Cleaning TSS Custom Companion  Template.esp... SUCCESS
-Cleaning Unofficial Oblivion Patch.esp... SUCCESS
-Cleaning UOP Vampire Aging & Face Fix.esp... SUCCESS
-Cleaning Vanilla Staff Replacer.esp... SUCCESS
-Cleaning WayshrineMapMarkers.esp... SUCCESS
-Cleaning Wayshrines Improved.esp... SUCCESS
-Cleaning zzCCAO.esp... SUCCESS
-
-Results:
-Success: 16  Fail: 0
-Successfully cleaned:
-  SM Plugin Refurbish Lite.esp
-  Smarter Ally Combat Positioning.esp
-  Spell Delete And Item Remove.esp
-  StoneMarkers.esp
-  TestAutoSheathWeapon.esp
-  The Player Random Conversation System.esp
-  Toaster Says Share Faction Recruitment.esp
-  Travelers of Cyrodiil.esp
-  Tropical Cyrodiil.esp
-  TSS Custom Companion  Template.esp
-  Unofficial Oblivion Patch.esp
-  UOP Vampire Aging & Face Fix.esp
-  Vanilla Staff Replacer.esp
-  WayshrineMapMarkers.esp
-  Wayshrines Improved.esp
-  zzCCAO.esp
-Done:
 ```
 
 ### Structure:
@@ -90,5 +56,24 @@ Done:
 .\Thread#\*  # <--- sequential folders with word thread for replication of AutoClean exe.
 ```
 
-### Plan
-Currently its branded towards the testing platform Oblivion, but for GitHub will be special generic branded one, before that it must work how I want. There will be game braned versions for each game I can cover featured on NexusMods.
+### Installation & Instructions
+1. **Download** and **Extract** the BethesdaGameEspCleaner release into a subfolder of your game directory (e.g. `C:\Games\Oblivion\BethesdaGameEspCleaner\`).
+2. **Download** the latest TES4Edit `.7z` from [Nexus Mods](https://www.nexusmods.com/oblivion/mods/11536) and place it in the same folder as the program files.
+3. **Ensure structure** looks like:
+   ```
+   Oblivion\
+   ├── Data\
+   └── BethesdaGameEspCleaner\
+       ├── BethesdaGameEspCleaner.bat
+       ├── oec_installer.ps1
+       ├── oec_program.ps1
+       ├── oec_thread.ps1
+       └── TES4Edit*.7z
+   ```
+4. **Run Setup** by launching the `.bat` file as Administrator → select option `2` to extract TES4Edit, set up thread folders, and generate config → choose 1–4 threads based on your system.
+5. **Start Cleaning** by running the `.bat` again as Administrator → select option `1` to scan ESPs, skip blacklisted files, and auto-clean the rest using multiple xEdit instances.
+- There is occasionally a mod that will pause the TES4Edit-AutoClean page open (AutoClean would otherwise do that anyhow), but if there is an "Ok" on the bottom right click that, or otherwise hit the "[x]" in the top right. 
+6. **Review Logs**: `oec_blacklist.txt` (cleaned), `oec_errorlist.txt` (failures); temp files and thread folders are auto-managed.
+
+### Notation
+- This version is configured for **The Elder Scrolls IV: Oblivion**, but, can be adapted for and will be released on, other xEdit-Autoclean supported games like Skyrim, Fallout 3, and New Vegas.
