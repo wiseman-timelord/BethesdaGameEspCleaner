@@ -40,14 +40,22 @@ if not defined PSCMD (
 )
 echo [OK] PowerShell located            & timeout /t 1 >nul
 
-:: exe exists
-if not exist "%AutoCleanExe%" (
-    echo Missing: %AutoCleanExe%
-    echo Place %AutoCleanExe% in script Dir.
+:: Check for cleaners in Thread folders
+set "THREAD_COUNT=1"
+if exist ".\Thread1\%AutoCleanExe%" (
+    if exist ".\Thread2\%AutoCleanExe%" (
+        set "THREAD_COUNT=2"
+        echo [OK] Found both Thread1 and Thread2 cleaners - Using 2 threads
+    ) else (
+        echo [INFO] Found only Thread1 cleaner - Using 1 thread
+    )
+    timeout /t 1 >nul
+) else (
+    echo ERROR: Missing %AutoCleanExe% in Thread1 folder
+    echo Place %AutoCleanExe% in .\Thread1\
     echo Download from: %XEditUrl%
     pause & exit /b 1
 )
-echo [OK] %AutoCleanExe%   & timeout /t 1 >nul
 
 :: data folder
 if not exist "..\Data" (
@@ -60,12 +68,17 @@ echo [OK] Data folder                  & timeout /t 1 >nul
 if not exist "oec_blacklist.txt" type nul >"oec_blacklist.txt"
 echo [OK] Blacklist ready              & timeout /t 1 >nul
 
+:: clean old batch files
+if exist ".\Thread1\oec_batch1.txt" del /q ".\Thread1\oec_batch1.txt"
+if exist ".\Thread2\oec_batch2.txt" del /q ".\Thread2\oec_batch2.txt"
+echo [OK] Old batch files cleaned      & timeout /t 1 >nul
+
 :: powershell banner
 echo.
-echo Launching PowerShell script...
+echo Launching PowerShell script with %THREAD_COUNT% thread(s)...
 
-:: run script
-"%PSCMD%" -NoP -EP Bypass -File "oec_powershell.ps1"
+:: run script with thread count parameter
+"%PSCMD%" -NoP -EP Bypass -File "oec_powershell.ps1" -ThreadCount %THREAD_COUNT%
 if errorlevel 1 (
     echo PowerShell script failed
     pause & exit /b 1
