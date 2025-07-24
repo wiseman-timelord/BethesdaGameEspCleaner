@@ -10,16 +10,17 @@ $GameTitle = 'Oblivion'
 $XEditVariant = 'TES4Edit'
 $AutoCleanExe = 'TES4EditQuickAutoClean.exe'
 $ScriptDir = $PSScriptRoot
-$BlackFile = "$ScriptDir\oec_blacklist.txt"
-$ErrorFile = "$ScriptDir\oec_errorlist.txt"
+$TempDir = "$ScriptDir\temp"
+$BlackFile = "$ScriptDir\oec_blacklist.txt"  # Persistent file stays in root
+$ErrorFile = "$ScriptDir\oec_errorlist.txt"  # Persistent file stays in root
 $DataPath = "$ScriptDir\..\Data"
 
-# Task Queue Files
-$TaskQueueFile = "$ScriptDir\oec_taskqueue.txt"
-$StatusFile1 = "$ScriptDir\Thread1\oec_status1.txt"
-$StatusFile2 = "$ScriptDir\Thread2\oec_status2.txt"
-$ProgressFile1 = "$ScriptDir\Thread1\oec_progress1.txt"
-$ProgressFile2 = "$ScriptDir\Thread2\oec_progress2.txt"
+# Task Queue Files (now in temp folder)
+$TaskQueueFile = "$TempDir\oec_taskqueue.txt"
+$StatusFile1 = "$TempDir\oec_status1.txt"
+$StatusFile2 = "$TempDir\oec_status2.txt"
+$ProgressFile1 = "$TempDir\oec_progress1.txt"
+$ProgressFile2 = "$TempDir\oec_progress2.txt"
 
 # Thread scripts
 $Thread1Script = "$ScriptDir\oec_thread1.ps1"
@@ -60,6 +61,11 @@ public static class Pwr {
 }
 
 function Initialize-TaskQueue($espList) {
+    # Ensure temp directory exists
+    if (-not (Test-Path $TempDir)) {
+        New-Item -ItemType Directory -Path $TempDir | Out-Null
+    }
+
     # Create task queue with all ESPs
     $taskQueue = @()
     for ($i = 0; $i -lt $espList.Count; $i++) {
@@ -90,35 +96,44 @@ function Wait-ForThreadsToComplete($totalTasks) {
     $completed = 0
     $lastProgress1 = 0
     $lastProgress2 = 0
+    $startTime = Get-Date
+    $timeoutMinutes = 60  # Timeout after 60 minutes
     
     Write-Host "Monitoring thread progress..." -ForegroundColor Yellow
     
     do {
         Start-Sleep -Seconds 2
         
+        # Check for timeout
+        $elapsedMinutes = ((Get-Date) - $startTime).TotalMinutes
+        if ($elapsedMinutes -gt $timeoutMinutes) {
+            Write-Host "Processing timeout reached ($timeoutMinutes minutes). Stopping..." -ForegroundColor Red
+            break
+        }
+        
         # Check thread statuses
         $status1 = Get-ThreadStatus 1
         $status2 = if ($ThreadCount -eq 2) { Get-ThreadStatus 2 } else { "N/A" }
         
-        # Read progress files
+        # Read progress files with bounds checking
         $progress1 = 0
         $progress2 = 0
         
         if (Test-Path $ProgressFile1) {
             $prog1Content = Get-Content $ProgressFile1 -ErrorAction SilentlyContinue
             if ($prog1Content -and $prog1Content[-1] -match "COMPLETED:(\d+)") {
-                $progress1 = [int]$matches[1]
+                $progress1 = [Math]::Min([int]$matches[1], $totalTasks)  # Cap at total tasks
             }
         }
         
         if ($ThreadCount -eq 2 -and (Test-Path $ProgressFile2)) {
             $prog2Content = Get-Content $ProgressFile2 -ErrorAction SilentlyContinue
             if ($prog2Content -and $prog2Content[-1] -match "COMPLETED:(\d+)") {
-                $progress2 = [int]$matches[1]
+                $progress2 = [Math]::Min([int]$matches[1], $totalTasks)  # Cap at total tasks
             }
         }
         
-        $totalCompleted = $progress1 + $progress2
+        $totalCompleted = [Math]::Min($progress1 + $progress2, $totalTasks)  # Ensure we don't exceed total
         
         # Display progress if changed
         if ($progress1 -ne $lastProgress1 -or $progress2 -ne $lastProgress2) {
@@ -131,11 +146,23 @@ function Wait-ForThreadsToComplete($totalTasks) {
             $lastProgress2 = $progress2
         }
         
-        # Check if both threads are done
+        # Check if both threads are done OR if we've completed all tasks
         $thread1Done = ($status1 -eq "FINISHED")
         $thread2Done = ($ThreadCount -eq 1) -or ($status2 -eq "FINISHED")
+        $allTasksCompleted = ($totalCompleted -ge $totalTasks)
         
-    } while (-not ($thread1Done -and $thread2Done))
+        # Add safety check for hung threads
+        if ($allTasksCompleted -and -not ($thread1Done -and $thread2Done)) {
+            Write-Host "All tasks completed but threads still running. Waiting for cleanup..." -ForegroundColor Yellow
+            Start-Sleep -Seconds 5  # Give threads time to finish cleanup
+            # Re-check status after wait
+            $status1 = Get-ThreadStatus 1
+            $status2 = if ($ThreadCount -eq 2) { Get-ThreadStatus 2 } else { "N/A" }
+            $thread1Done = ($status1 -eq "FINISHED")
+            $thread2Done = ($ThreadCount -eq 1) -or ($status2 -eq "FINISHED")
+        }
+        
+    } while (-not (($thread1Done -and $thread2Done) -or $allTasksCompleted))
     
     Write-Host "All threads completed!" -ForegroundColor Green
     return $totalCompleted
@@ -148,13 +175,18 @@ Write-Host "    $GameTitle Esp Cleaner (Task Queue with $ThreadCount thread(s))"
 Write-Separator
 Write-Host ""
 
+# Ensure temp directory exists
+if (-not (Test-Path $TempDir)) {
+    New-Item -ItemType Directory -Path $TempDir | Out-Null
+}
+
 # Clean up old files
 $filesToClean = @($TaskQueueFile, $StatusFile1, $StatusFile2, $ProgressFile1, $ProgressFile2)
 foreach ($file in $filesToClean) {
     if (Test-Path $file) { Remove-Item $file -ErrorAction SilentlyContinue }
 }
 
-# Ensure directories exist
+# Ensure thread directories exist (for executables)
 if (-not (Test-Path "$ScriptDir\Thread1")) { New-Item -ItemType Directory -Path "$ScriptDir\Thread1" | Out-Null }
 if ($ThreadCount -eq 2 -and -not (Test-Path "$ScriptDir\Thread2")) {
     New-Item -ItemType Directory -Path "$ScriptDir\Thread2" | Out-Null
