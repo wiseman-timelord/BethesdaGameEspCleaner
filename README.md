@@ -1,7 +1,3 @@
-Got it! Here's your revised and logically structured `README.md` with **Description**, then **Installation & Instructions** combined into a single step-by-step numbered section, as requested.
-
----
-
 # BethesdaGameEspCleaner
 **Status:** Beta
 
