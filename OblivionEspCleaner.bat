@@ -48,9 +48,9 @@ set "THREAD_COUNT=1"
 if exist ".\Thread1\%AutoCleanExe%" (
     if exist ".\Thread2\%AutoCleanExe%" (
         set "THREAD_COUNT=2"
-        echo [OK] Found both Thread1 and Thread2 cleaners - Using 2 threads
+        echo [OK] Found, Thread1 and Thread2, using 2 threads
     ) else (
-        echo [INFO] Found only Thread1 cleaner - Using 1 thread
+        echo [INFO] Found only Thread1, using 1 thread.
     )
     timeout /t 1 >nul
 ) else (
@@ -77,7 +77,7 @@ echo [OK] Old files cleaned            & timeout /t 1 >nul
 
 :: powershell banner
 echo.
-echo Launching PowerShell script with %THREAD_COUNT% thread(s)...
+echo Launching PowerShell script (%THREAD_COUNT% threads)...
 
 :: run script with thread count parameter
 "%PSCMD%" -NoP -EP Bypass -File "oec_powershell.ps1" -ThreadCount %THREAD_COUNT%

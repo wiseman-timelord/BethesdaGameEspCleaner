@@ -138,9 +138,9 @@ function Wait-ForThreadsToComplete($totalTasks) {
         # Display progress if changed
         if ($progress1 -ne $lastProgress1 -or $progress2 -ne $lastProgress2) {
             if ($ThreadCount -eq 2) {
-                Write-Host "Progress - Thread1: $progress1, Thread2: $progress2, Total: $totalCompleted/$totalTasks" -ForegroundColor Gray
+                Write-Host "Thread1 = $progress1, Thread2 = $progress2, Completed/Total = $totalCompleted/$totalTasks" -ForegroundColor Gray
             } else {
-                Write-Host "Progress - Thread1: $progress1, Total: $totalCompleted/$totalTasks" -ForegroundColor Gray
+                Write-Host "Thread1 = $progress1, Complete/Total = $totalCompleted/$totalTasks" -ForegroundColor Gray
             }
             $lastProgress1 = $progress1
             $lastProgress2 = $progress2
