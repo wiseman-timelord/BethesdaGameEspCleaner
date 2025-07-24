@@ -6,6 +6,7 @@ set "GAME_TITLE=Oblivion"
 set "XEditVariant=TES4Edit"
 set "AutoCleanExe=TES4EditQuickAutoClean.exe"
 set "XEditUrl=https://www.nexusmods.com/oblivion/mods/11536"
+set "DEFAULT_THREADS=2"
 
 :: admin check
 net session >nul 2>&1 || (
@@ -27,7 +28,7 @@ goto :eof
 
 :Banner
 call :Bar
-echo     %GAME_TITLE% Esp Cleaner
+echo     %GAME_TITLE% Esp Cleaner (Multi-Thread)
 call :Bar
 echo.
 
@@ -43,21 +44,22 @@ if not defined PSCMD (
 )
 echo [OK] PowerShell located            & timeout /t 1 >nul
 
-:: Check for cleaners in Thread folders
-set "THREAD_COUNT=1"
-if exist ".\Thread1\%AutoCleanExe%" (
-    if exist ".\Thread2\%AutoCleanExe%" (
-        set "THREAD_COUNT=2"
-        echo [OK] Found, Thread1 and Thread2, using 2 threads
-    ) else (
-        echo [INFO] Found only Thread1, using 1 thread.
+:: Auto-detect available threads by checking for executables
+set "THREAD_COUNT=0"
+for /L %%i in (1,1,16) do (
+    if exist ".\Thread%%i\%AutoCleanExe%" (
+        set /a "THREAD_COUNT=%%i"
     )
-    timeout /t 1 >nul
-) else (
-    echo ERROR: Missing %AutoCleanExe% in Thread1 folder
-    echo Place %AutoCleanExe% in .\Thread1\
+)
+
+if %THREAD_COUNT% equ 0 (
+    echo ERROR: No %AutoCleanExe% found in any Thread folders
+    echo Create directories Thread1, Thread2, etc. and place %AutoCleanExe% in each
     echo Download from: %XEditUrl%
     pause & exit /b 1
+) else (
+    echo [OK] Found %THREAD_COUNT% thread^(s^) installed
+    timeout /t 1 >nul
 )
 
 :: data folder
@@ -116,18 +118,16 @@ if exist ".\temp\oec_batch2.txt" del /q ".\temp\oec_batch2.txt" 2>nul
 :: Task queue system files - now in temp
 if exist ".\temp\oec_taskqueue.txt" del /q ".\temp\oec_taskqueue.txt" 2>nul
 
-:: Thread status files - now in temp
-if exist ".\temp\oec_status1.txt" del /q ".\temp\oec_status1.txt" 2>nul
-if exist ".\temp\oec_status2.txt" del /q ".\temp\oec_status2.txt" 2>nul
+:: Thread status and progress files for all possible threads - now in temp
+for /L %%i in (1,1,16) do (
+    if exist ".\temp\oec_status%%i.txt" del /q ".\temp\oec_status%%i.txt" 2>nul
+    if exist ".\temp\oec_progress%%i.txt" del /q ".\temp\oec_progress%%i.txt" 2>nul
+)
 
-:: Thread progress files - now in temp
-if exist ".\temp\oec_progress1.txt" del /q ".\temp\oec_progress1.txt" 2>nul
-if exist ".\temp\oec_progress2.txt" del /q ".\temp\oec_progress2.txt" 2>nul
-
-:: Any temporary xEdit files that might be left behind in thread folders
-if exist ".\Thread1\*.tmp" del /q ".\Thread1\*.tmp" 2>nul
-if exist ".\Thread2\*.tmp" del /q ".\Thread2\*.tmp" 2>nul
-if exist ".\Thread1\TES4Edit_*.txt" del /q ".\Thread1\TES4Edit_*.txt" 2>nul
-if exist ".\Thread2\TES4Edit_*.txt" del /q ".\Thread2\TES4Edit_*.txt" 2>nul
+:: Clean up any thread-specific temp files in Thread directories
+for /L %%i in (1,1,16) do (
+    if exist ".\Thread%%i\*.tmp" del /q ".\Thread%%i\*.tmp" 2>nul
+    if exist ".\Thread%%i\TES4Edit_*.txt" del /q ".\Thread%%i\TES4Edit_*.txt" 2>nul
+)
 
 goto :eof

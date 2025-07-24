@@ -1,7 +1,6 @@
-# Script: .\oec_powershell.ps1 - Task Queue Version
-# PARAMETERS
+# Updated oec_powershell.ps1 - Multi-Thread Task Queue Version
 param(
-    [int]$ThreadCount = 1  # Default to 1 thread if not specified
+    [int]$ThreadCount = 2  # Default to 2 threads, can be overridden
 )
 
 # CONSTANTS
@@ -11,20 +10,13 @@ $XEditVariant = 'TES4Edit'
 $AutoCleanExe = 'TES4EditQuickAutoClean.exe'
 $ScriptDir = $PSScriptRoot
 $TempDir = "$ScriptDir\temp"
-$BlackFile = "$ScriptDir\oec_blacklist.txt"  # Persistent file stays in root
-$ErrorFile = "$ScriptDir\oec_errorlist.txt"  # Persistent file stays in root
+$BlackFile = "$ScriptDir\oec_blacklist.txt"
+$ErrorFile = "$ScriptDir\oec_errorlist.txt"
 $DataPath = "$ScriptDir\..\Data"
 
 # Task Queue Files (now in temp folder)
 $TaskQueueFile = "$TempDir\oec_taskqueue.txt"
-$StatusFile1 = "$TempDir\oec_status1.txt"
-$StatusFile2 = "$TempDir\oec_status2.txt"
-$ProgressFile1 = "$TempDir\oec_progress1.txt"
-$ProgressFile2 = "$TempDir\oec_progress2.txt"
-
-# Thread scripts
-$Thread1Script = "$ScriptDir\oec_thread1.ps1"
-$Thread2Script = "$ScriptDir\oec_thread2.ps1"
+$ThreadScript = "$ScriptDir\oec_thread.ps1"  # Single thread script
 
 # FUNCTIONS
 function Write-Separator {
@@ -73,33 +65,40 @@ function Initialize-TaskQueue($espList) {
     }
     $taskQueue | Out-File $TaskQueueFile -Encoding UTF8
     
-    # Initialize status files
-    "READY" | Out-File $StatusFile1 -Encoding UTF8
-    if ($ThreadCount -eq 2) {
-        "READY" | Out-File $StatusFile2 -Encoding UTF8
+    # Clear any existing status/progress files for all possible threads (cleanup)
+    for ($i = 1; $i -le 16; $i++) {  # Clean up to 16 possible thread files
+        $statusFile = "$TempDir\oec_status$i.txt"
+        $progressFile = "$TempDir\oec_progress$i.txt"
+        if (Test-Path $statusFile) { Remove-Item $statusFile }
+        if (Test-Path $progressFile) { Remove-Item $progressFile }
     }
-    
-    # Clear progress files
-    if (Test-Path $ProgressFile1) { Remove-Item $ProgressFile1 }
-    if (Test-Path $ProgressFile2) { Remove-Item $ProgressFile2 }
 }
 
 function Get-ThreadStatus($threadNum) {
-    $statusFile = if ($threadNum -eq 1) { $StatusFile1 } else { $StatusFile2 }
+    $statusFile = "$TempDir\oec_status$threadNum.txt"
     if (Test-Path $statusFile) {
         return (Get-Content $statusFile -Raw).Trim()
     }
     return "UNKNOWN"
 }
 
+function Get-ThreadProgress($threadNum) {
+    $progressFile = "$TempDir\oec_progress$threadNum.txt"
+    if (Test-Path $progressFile) {
+        $content = Get-Content $progressFile -ErrorAction SilentlyContinue
+        if ($content -and $content[-1] -match "COMPLETED:(\d+)") {
+            return [int]$matches[1]
+        }
+    }
+    return 0
+}
+
 function Wait-ForThreadsToComplete($totalTasks) {
-    $completed = 0
-    $lastProgress1 = 0
-    $lastProgress2 = 0
+    $lastProgressArray = @(0) * ($ThreadCount + 1)  # Index 0 unused, 1-N for threads
     $startTime = Get-Date
-    $timeoutMinutes = 60  # Timeout after 60 minutes
+    $timeoutMinutes = 60
     
-    Write-Host "Monitoring thread progress..." -ForegroundColor Yellow
+    Write-Host "Monitoring $ThreadCount thread(s) progress..." -ForegroundColor Yellow
     
     do {
         Start-Sleep -Seconds 2
@@ -111,111 +110,158 @@ function Wait-ForThreadsToComplete($totalTasks) {
             break
         }
         
-        # Check thread statuses
-        $status1 = Get-ThreadStatus 1
-        $status2 = if ($ThreadCount -eq 2) { Get-ThreadStatus 2 } else { "N/A" }
+        # Check all thread statuses and progress
+        $allFinished = $true
+        $totalCompleted = 0
+        $progressChanged = $false
         
-        # Read progress files with bounds checking
-        $progress1 = 0
-        $progress2 = 0
-        
-        if (Test-Path $ProgressFile1) {
-            $prog1Content = Get-Content $ProgressFile1 -ErrorAction SilentlyContinue
-            if ($prog1Content -and $prog1Content[-1] -match "COMPLETED:(\d+)") {
-                $progress1 = [Math]::Min([int]$matches[1], $totalTasks)  # Cap at total tasks
+        for ($i = 1; $i -le $ThreadCount; $i++) {
+            $status = Get-ThreadStatus $i
+            $progress = Get-ThreadProgress $i
+            
+            # Cap progress at total tasks
+            $progress = [Math]::Min($progress, $totalTasks)
+            $totalCompleted += $progress
+            
+            if ($progress -ne $lastProgressArray[$i]) {
+                $progressChanged = $true
+                $lastProgressArray[$i] = $progress
+            }
+            
+            if ($status -ne "FINISHED") {
+                $allFinished = $false
             }
         }
         
-        if ($ThreadCount -eq 2 -and (Test-Path $ProgressFile2)) {
-            $prog2Content = Get-Content $ProgressFile2 -ErrorAction SilentlyContinue
-            if ($prog2Content -and $prog2Content[-1] -match "COMPLETED:(\d+)") {
-                $progress2 = [Math]::Min([int]$matches[1], $totalTasks)  # Cap at total tasks
-            }
-        }
-        
-        $totalCompleted = [Math]::Min($progress1 + $progress2, $totalTasks)  # Ensure we don't exceed total
+        # Cap total completed
+        $totalCompleted = [Math]::Min($totalCompleted, $totalTasks)
         
         # Display progress if changed
-        if ($progress1 -ne $lastProgress1 -or $progress2 -ne $lastProgress2) {
-            if ($ThreadCount -eq 2) {
-                Write-Host "Thread1 = $progress1, Thread2 = $progress2, Completed/Total = $totalCompleted/$totalTasks" -ForegroundColor Gray
-            } else {
-                Write-Host "Thread1 = $progress1, Complete/Total = $totalCompleted/$totalTasks" -ForegroundColor Gray
+        if ($progressChanged) {
+            $progressDisplay = @()
+            for ($i = 1; $i -le $ThreadCount; $i++) {
+                $progressDisplay += "T$i=$($lastProgressArray[$i])"
             }
-            $lastProgress1 = $progress1
-            $lastProgress2 = $progress2
+            $progressStr = $progressDisplay -join ", "
+            Write-Host "$progressStr, Total=$totalCompleted/$totalTasks" -ForegroundColor Gray
         }
         
-        # Check if both threads are done OR if we've completed all tasks
-        $thread1Done = ($status1 -eq "FINISHED")
-        $thread2Done = ($ThreadCount -eq 1) -or ($status2 -eq "FINISHED")
+        # Check completion conditions
         $allTasksCompleted = ($totalCompleted -ge $totalTasks)
         
-        # Add safety check for hung threads
-        if ($allTasksCompleted -and -not ($thread1Done -and $thread2Done)) {
+        if ($allTasksCompleted -and -not $allFinished) {
             Write-Host "All tasks completed but threads still running. Waiting for cleanup..." -ForegroundColor Yellow
-            Start-Sleep -Seconds 5  # Give threads time to finish cleanup
-            # Re-check status after wait
-            $status1 = Get-ThreadStatus 1
-            $status2 = if ($ThreadCount -eq 2) { Get-ThreadStatus 2 } else { "N/A" }
-            $thread1Done = ($status1 -eq "FINISHED")
-            $thread2Done = ($ThreadCount -eq 1) -or ($status2 -eq "FINISHED")
+            Start-Sleep -Seconds 5
+            # Re-check statuses
+            $allFinished = $true
+            for ($i = 1; $i -le $ThreadCount; $i++) {
+                if ((Get-ThreadStatus $i) -ne "FINISHED") {
+                    $allFinished = $false
+                    break
+                }
+            }
         }
         
-    } while (-not (($thread1Done -and $thread2Done) -or $allTasksCompleted))
+    } while (-not ($allFinished -or $allTasksCompleted))
     
     Write-Host "All threads completed!" -ForegroundColor Green
     return $totalCompleted
 }
 
+function Validate-ThreadSetup {
+    $missingThreads = @()
+    $validThreads = 0
+    
+    for ($i = 1; $i -le $ThreadCount; $i++) {
+        $threadDir = "$ScriptDir\Thread$i"
+        $threadExe = "$threadDir\$AutoCleanExe"
+        
+        if (-not (Test-Path $threadDir)) {
+            try {
+                New-Item -ItemType Directory -Path $threadDir | Out-Null
+                Write-Host "[INFO] Created Thread$i directory" -ForegroundColor Cyan
+            } catch {
+                Write-Host "[ERROR] Failed to create Thread$i directory" -ForegroundColor Red
+                $missingThreads += $i
+                continue
+            }
+        }
+        
+        if (-not (Test-Path $threadExe)) {
+            $missingThreads += $i
+        } else {
+            $validThreads++
+        }
+    }
+    
+    if ($missingThreads.Count -gt 0) {
+        Write-Host "[WARNING] Missing executables in Thread folders: $($missingThreads -join ', ')" -ForegroundColor Yellow
+        Write-Host "[INFO] Place '$AutoCleanExe' in the following directories:" -ForegroundColor Yellow
+        foreach ($thread in $missingThreads) {
+            Write-Host "  $ScriptDir\Thread$thread\" -ForegroundColor Yellow
+        }
+        
+        if ($validThreads -eq 0) {
+            Write-Host "[ERROR] No valid thread executables found!" -ForegroundColor Red
+            return $false
+        } else {
+            Write-Host "[INFO] Continuing with $validThreads available thread(s)" -ForegroundColor Cyan
+            # Adjust thread count to available threads
+            $script:ThreadCount = $validThreads
+            return $true
+        }
+    }
+    
+    Write-Host "[OK] All $ThreadCount thread directories validated" -ForegroundColor Green
+    return $true
+}
+
 # MAIN
 Clear-Host
 Write-Separator
-Write-Host "    $GameTitle Esp Cleaner" -ForegroundColor Cyan
+Write-Host "    $GameTitle Esp Cleaner (Multi-Thread)" -ForegroundColor Cyan
 Write-Separator
 Write-Host ""
+
+# Validate thread count
+if ($ThreadCount -lt 1) {
+    Write-Host "[ERROR] Thread count must be at least 1" -ForegroundColor Red
+    exit 1
+}
+
+if ($ThreadCount -gt 16) {
+    Write-Host "[WARNING] Thread count limited to 16 maximum" -ForegroundColor Yellow
+    $ThreadCount = 16
+}
+
+Write-Host "[INFO] Configured for $ThreadCount thread(s)" -ForegroundColor Cyan
 
 # Ensure temp directory exists
 if (-not (Test-Path $TempDir)) {
     New-Item -ItemType Directory -Path $TempDir | Out-Null
 }
 
-# Clean up old files
-$filesToClean = @($TaskQueueFile, $StatusFile1, $StatusFile2, $ProgressFile1, $ProgressFile2)
+# Clean up old task queue files
+$filesToClean = @($TaskQueueFile)
+for ($i = 1; $i -le 16; $i++) {
+    $filesToClean += "$TempDir\oec_status$i.txt"
+    $filesToClean += "$TempDir\oec_progress$i.txt"
+}
+
 foreach ($file in $filesToClean) {
     if (Test-Path $file) { Remove-Item $file -ErrorAction SilentlyContinue }
 }
 
-# Ensure thread directories exist (for executables)
-if (-not (Test-Path "$ScriptDir\Thread1")) { New-Item -ItemType Directory -Path "$ScriptDir\Thread1" | Out-Null }
-if ($ThreadCount -eq 2 -and -not (Test-Path "$ScriptDir\Thread2")) {
-    New-Item -ItemType Directory -Path "$ScriptDir\Thread2" | Out-Null
-}
-
-# Verify executables exist
-if (-not (Test-Path "$ScriptDir\Thread1\$AutoCleanExe")) {
-    Write-Host "ERROR: Thread1 executable not found!" -ForegroundColor Red
-    Write-Host "Place '$AutoCleanExe' in: $ScriptDir\Thread1\" -ForegroundColor Yellow
+# Validate thread setup
+if (-not (Validate-ThreadSetup)) {
     exit 1
 }
 
-if ($ThreadCount -eq 2 -and -not (Test-Path "$ScriptDir\Thread2\$AutoCleanExe")) {
-    Write-Host "WARNING: Thread2 executable not found! Falling back to single thread" -ForegroundColor Yellow
-    $ThreadCount = 1
-}
-
-# Verify thread scripts exist
-if (-not (Test-Path $Thread1Script)) {
-    Write-Host "ERROR: Thread1 script not found: $Thread1Script" -ForegroundColor Red
+# Verify thread script exists
+if (-not (Test-Path $ThreadScript)) {
+    Write-Host "[ERROR] Thread script not found: $ThreadScript" -ForegroundColor Red
     exit 1
 }
-
-if ($ThreadCount -eq 2 -and -not (Test-Path $Thread2Script)) {
-    Write-Host "ERROR: Thread2 script not found: $Thread2Script" -ForegroundColor Red
-    exit 1
-}
-
-Write-Host "Using $ThreadCount thread(s) for processing" -ForegroundColor Gray
 
 # Clean old blacklist entries
 CleanOld
@@ -243,7 +289,7 @@ if (Test-Path $BlackFile) {
 }
 
 # Filter ESPs to process
-$cut  = (Get-Date).AddDays(-$DaysSkip)
+$cut = (Get-Date).AddDays(-$DaysSkip)
 $todo = $esps | Where-Object { !$black.ContainsKey($_.Name) -or $black[$_.Name] -lt $cut }
 
 if (!$todo) {
@@ -263,18 +309,20 @@ Write-Host "Starting task queue processing with $ThreadCount thread(s)..." -Fore
 
 PreventSleep($true)
 try {
-    # Start thread jobs
-    $job1 = Start-Job -ScriptBlock {
-        param($scriptPath, $exe)
-        & $scriptPath -AutoCleanExe $exe
-    } -ArgumentList $Thread1Script, $AutoCleanExe
-
-    $job2 = $null
-    if ($ThreadCount -eq 2) {
-        $job2 = Start-Job -ScriptBlock {
-            param($scriptPath, $exe)
-            & $scriptPath -AutoCleanExe $exe
-        } -ArgumentList $Thread2Script, $AutoCleanExe
+    # Start all thread jobs
+    $jobs = @()
+    for ($i = 1; $i -le $ThreadCount; $i++) {
+        $job = Start-Job -ScriptBlock {
+            param($scriptPath, $threadNum, $autoCleanExe)
+            & $scriptPath -ThreadNumber $threadNum -AutoCleanExe $autoCleanExe
+        } -ArgumentList $ThreadScript, $i, $AutoCleanExe
+        
+        $jobs += @{
+            Job = $job
+            ThreadNumber = $i
+        }
+        
+        Write-Host "[INFO] Started Thread $i (Job ID: $($job.Id))" -ForegroundColor Gray
     }
 
     # Monitor threads and wait for completion
@@ -283,26 +331,21 @@ try {
     Write-Host "`nFinal Results:" -ForegroundColor Green
     Write-Host "Tasks completed: $completedTasks/$($todo.Count)" -ForegroundColor Green
 
-    # Display any job output
-    $output1 = Receive-Job $job1 -ErrorAction SilentlyContinue
-    if ($output1) {
-        Write-Host "`nThread 1 Messages:" -ForegroundColor Cyan
-        $output1 | ForEach-Object { Write-Host "  $_" }
-    }
-
-    if ($job2) {
-        $output2 = Receive-Job $job2 -ErrorAction SilentlyContinue
-        if ($output2) {
-            Write-Host "`nThread 2 Messages:" -ForegroundColor Magenta
-            $output2 | ForEach-Object { Write-Host "  $_" }
+    # Display job outputs
+    foreach ($jobInfo in $jobs) {
+        $output = Receive-Job $jobInfo.Job -ErrorAction SilentlyContinue
+        if ($output) {
+            Write-Host "`nThread $($jobInfo.ThreadNumber) Messages:" -ForegroundColor Cyan
+            $output | ForEach-Object { Write-Host "  $_" }
         }
     }
 
     # Clean up jobs
-    Remove-Job $job1 -Force -ErrorAction SilentlyContinue
-    if ($job2) { Remove-Job $job2 -Force -ErrorAction SilentlyContinue }
+    foreach ($jobInfo in $jobs) {
+        Remove-Job $jobInfo.Job -Force -ErrorAction SilentlyContinue
+    }
 
-    Write-Host "`nTask queue processing completed!" -ForegroundColor Green
+    Write-Host "`nMulti-thread task queue processing completed!" -ForegroundColor Green
 } catch {
     Write-Host "ERROR: Processing failed: $_" -ForegroundColor Red
     exit 1
