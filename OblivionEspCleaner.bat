@@ -3,10 +3,8 @@
 
 :: Constants
 set "GAME_TITLE=Oblivion"
-set "XEditVariant=TES4Edit"
-set "AutoCleanExe=TES4EditQuickAutoClean.exe"
-set "XEditUrl=https://www.nexusmods.com/oblivion/mods/11536"
-set "DEFAULT_THREADS=2"
+set "SETTINGS_FILE=oec_settings.psd1"
+set "INSTALLER_SCRIPT=oec_installer.ps1"
 
 :: admin check
 net session >nul 2>&1 || (
@@ -20,7 +18,8 @@ pushd "%~dp0"
 :: Create temp folder if it doesn't exist
 if not exist ".\temp" mkdir ".\temp"
 
-:: Skip Bar Bar
+:MainMenu
+cls
 goto :Banner
 :Bar
 echo ===============================================================================
@@ -28,100 +27,243 @@ goto :eof
 
 :Banner
 call :Bar
-echo     %GAME_TITLE% Esp Cleaner (Multi-Thread)
+echo      %GAME_TITLE% Esp Cleaner
+call :Bar
+echo.
+echo.
+echo.
+echo.
+echo.
+echo.
+echo.
+echo     1. Run %GAME_TITLE% Esp Cleaner
+echo.
+echo     2. Configure/Install Program
+echo.
+echo.
+echo.
+echo.
+echo.
+echo.
+echo.
+echo.
+call :Bar
+set /p "choice=Selection; Menu Options = 1-2, Exit Batch = X: "
+
+:: Process menu choice
+if /i "%choice%"=="1" goto :RunCleaner
+if /i "%choice%"=="2" goto :Configure
+if /i "%choice%"=="x" goto :Exit
+if /i "%choice%"=="X" goto :Exit
+
+echo Invalid selection. Please choose 1, 2, or X.
+timeout /t 2 >nul
+goto :MainMenu
+
+:RunCleaner
+cls
+call :Bar
+echo Starting %GAME_TITLE% Esp Cleaner...
 call :Bar
 echo.
 
-:: find ps
+:: Check if configuration exists
+if not exist "%SETTINGS_FILE%" (
+    echo [ERROR] Configuration not found!
+    echo Please run "Configure/Install Program" first.
+    echo.
+    pause
+    goto :MainMenu
+)
+
+:: Load settings and extract thread count
+call :LoadSettings
+if %ERRORLEVEL% neq 0 (
+    echo [ERROR] Failed to read configuration!
+    echo Please reconfigure the program.
+    echo.
+    pause
+    goto :MainMenu
+)
+
+echo [OK] Configuration loaded ^(%THREAD_COUNT% threads^)
+timeout /t 1 >nul
+
+:: Verify PowerShell
+call :VerifyPowerShell
+if %ERRORLEVEL% neq 0 (
+    pause
+    goto :MainMenu
+)
+
+:: Verify Data folder
+if not exist "..\Data" (
+    echo [ERROR] Install to %GAME_TITLE%Folder\SomeFolder
+    echo Current location appears incorrect.
+    pause
+    goto :MainMenu
+)
+echo [OK] Data folder found
+timeout /t 1 >nul
+
+:: Verify thread installations
+call :VerifyThreads
+if %ERRORLEVEL% neq 0 (
+    echo [ERROR] Thread verification failed!
+    echo Please reconfigure the program.
+    pause
+    goto :MainMenu
+)
+
+:: Create blacklist if needed (keep in root as it's persistent data)
+if not exist "oec_blacklist.txt" type nul >"oec_blacklist.txt"
+echo [OK] Blacklist ready
+timeout /t 1 >nul
+
+:: Comprehensive cleanup of old files
+call :CleanupFiles
+echo [OK] Old files cleaned
+timeout /t 1 >nul
+
+:: PowerShell banner
+echo.
+echo Launching PowerShell script ^(%THREAD_COUNT% threads^)...
+
+:: Run script with thread count parameter
+"%PSCMD%" -NoP -EP Bypass -File "oec_program.ps1" -ThreadCount %THREAD_COUNT%
+set "PS_EXIT_CODE=%ERRORLEVEL%"
+
+:: Post-execution cleanup (in case PowerShell didn't clean up properly)
+call :CleanupFiles
+echo [OK] Post-execution cleanup done
+timeout /t 1 >nul
+
+if %PS_EXIT_CODE% neq 0 (
+    echo [ERROR] PowerShell script failed with exit code %PS_EXIT_CODE%
+    pause
+    goto :MainMenu
+)
+echo [OK] PowerShell script finished
+timeout /t 1 >nul
+
+:: Credits
+echo.
+echo Thank you for using %GAME_TITLE% Esp Cleaner by Wiseman-Timelord
+echo.
+echo Also Credit to xEdit team for making the backend tool.
+timeout /t 5 >nul
+goto :MainMenu
+
+:Configure
+cls
+call :Bar
+echo Starting Configuration/Installation...
+call :Bar
+echo.
+
+:: Verify PowerShell
+call :VerifyPowerShell
+if %ERRORLEVEL% neq 0 (
+    pause
+    goto :MainMenu
+)
+
+:: Run PowerShell installer
+echo [INFO] Launching PowerShell installer...
+echo.
+"%PSCMD%" -NoP -EP Bypass -File "%INSTALLER_SCRIPT%"
+
+goto :MainMenu
+
+:Exit
+cls
+call :Bar
+echo    %GAME_TITLE% Esp Cleaner
+call :Bar
+echo.
+echo Exiting Batch in 5 seconds...
+timeout /t 5 >nul
+popd
+exit /b 0
+
+:: Skip Bar Bar
+goto :End
+
+:Bar
+echo ===============================================================================
+goto :eof
+
+:End
+
+:VerifyPowerShell
 set "PSCMD="
 for /f "delims=" %%G in ('where pwsh.exe 2^>nul') do set "PSCMD=%%G"
 if not defined PSCMD (
     for /f "delims=" %%G in ('where powershell.exe 2^>nul') do set "PSCMD=%%G"
 )
 if not defined PSCMD (
-    echo PowerShell missing
-    pause & exit /b 1
+    echo [ERROR] PowerShell not found
+    exit /b 1
 )
-echo [OK] PowerShell located            & timeout /t 1 >nul
+echo [OK] PowerShell located
+timeout /t 1 >nul
+exit /b 0
 
-:: Auto-detect available threads by checking for executables
-set "THREAD_COUNT=0"
-for /L %%i in (1,1,16) do (
-    if exist ".\Thread%%i\%AutoCleanExe%" (
-        set /a "THREAD_COUNT=%%i"
+:LoadSettings
+:: Parse the PowerShell data file to extract ThreadCount
+setlocal enabledelayedexpansion
+set "THREAD_COUNT="
+for /f "usebackq tokens=1,2 delims== " %%A in ("%SETTINGS_FILE%") do (
+    if "%%A"=="ThreadCount" (
+        set "TEMP_COUNT=%%B"
+        set "TEMP_COUNT=!TEMP_COUNT: =!"
+        set "TEMP_COUNT=!TEMP_COUNT:'=!"
+        set "TEMP_COUNT=!TEMP_COUNT:"=!"
+    )
+)
+endlocal & set "THREAD_COUNT=%TEMP_COUNT%"
+if not defined THREAD_COUNT (
+    echo [ERROR] Could not read ThreadCount from %SETTINGS_FILE%
+    exit /b 1
+)
+:: Validate thread count is numeric
+set /a "TEST_COUNT=%THREAD_COUNT%" 2>nul
+if %TEST_COUNT% leq 0 (
+    echo [ERROR] Invalid ThreadCount in settings: %THREAD_COUNT%
+    exit /b 1
+)
+exit /b 0
+
+:VerifyThreads
+:: Check that all required thread directories exist with executables
+set "MISSING_THREADS="
+set "AUTOCLEANER_EXE=TES4EditQuickAutoClean.exe"
+call :LoadSettings >nul 2>&1 || exit /b 1
+
+for /L %%i in (1,1,%THREAD_COUNT%) do (
+    if not exist ".\Thread%%i\%AUTOCLEANER_EXE%" (
+        if defined MISSING_THREADS (
+            set "MISSING_THREADS=%MISSING_THREADS%, %%i"
+        ) else (
+            set "MISSING_THREADS=%%i"
+        )
     )
 )
 
-if %THREAD_COUNT% equ 0 (
-    echo ERROR: No %AutoCleanExe% found in any Thread folders
-    echo Create directories Thread1, Thread2, etc. and place %AutoCleanExe% in each
-    echo Download from: %XEditUrl%
-    pause & exit /b 1
-) else (
-    echo [OK] Found %THREAD_COUNT% thread^(s^) installed
-    timeout /t 1 >nul
+if defined MISSING_THREADS (
+    echo [ERROR] Missing executables in Thread folders: %MISSING_THREADS%
+    echo Please run "Configure/Install Program" to fix this issue.
+    exit /b 1
 )
 
-:: data folder
-if not exist "..\Data" (
-    echo Install to %GAME_TITLE%Folder\SomeFolder
-    pause & exit /b 1
-)
-echo [OK] Data folder                  & timeout /t 1 >nul
-
-:: blacklist (keep in root as it's persistent data)
-if not exist "oec_blacklist.txt" type nul >"oec_blacklist.txt"
-echo [OK] Blacklist ready              & timeout /t 1 >nul
-
-:: Comprehensive cleanup of old files
-call :CleanupFiles
-echo [OK] Old files cleaned            & timeout /t 1 >nul
-
-:: powershell banner
-echo.
-echo Launching PowerShell script (%THREAD_COUNT% threads)...
-
-:: run script with thread count parameter
-"%PSCMD%" -NoP -EP Bypass -File "oec_powershell.ps1" -ThreadCount %THREAD_COUNT%
-set "PS_EXIT_CODE=%ERRORLEVEL%"
-
-:: Post-execution cleanup (in case PowerShell didn't clean up properly)
-call :CleanupFiles
-echo [OK] Post-execution cleanup done  & timeout /t 1 >nul
-
-if %PS_EXIT_CODE% neq 0 (
-    echo PowerShell script failed with exit code %PS_EXIT_CODE%
-    pause & exit /b %PS_EXIT_CODE%
-)
-echo [OK] PowerShell script finished   & timeout /t 1 >nul
-
-:: credits
-echo.
-echo Thank you for using %GAME_TITLE% Esp Cleaner by Wiseman-Timelord
-echo.
-echo Also Credit to xEdit team for making the backend tool.
-timeout /t 5 >nul
-popd
+echo [OK] All %THREAD_COUNT% thread^(s^) verified
+timeout /t 1 >nul
 exit /b 0
 
-:: Cleanup function
 :CleanupFiles
 :: Delete entire temp folder contents but preserve the folder
 if exist ".\temp" (
     del /q ".\temp\*" 2>nul
-)
-
-:: Old batch files (legacy) - now in temp
-if exist ".\temp\oec_batch1.txt" del /q ".\temp\oec_batch1.txt" 2>nul
-if exist ".\temp\oec_batch2.txt" del /q ".\temp\oec_batch2.txt" 2>nul
-
-:: Task queue system files - now in temp
-if exist ".\temp\oec_taskqueue.txt" del /q ".\temp\oec_taskqueue.txt" 2>nul
-
-:: Thread status and progress files for all possible threads - now in temp
-for /L %%i in (1,1,16) do (
-    if exist ".\temp\oec_status%%i.txt" del /q ".\temp\oec_status%%i.txt" 2>nul
-    if exist ".\temp\oec_progress%%i.txt" del /q ".\temp\oec_progress%%i.txt" 2>nul
 )
 
 :: Clean up any thread-specific temp files in Thread directories
