@@ -2,7 +2,7 @@
 Status: Alpha
 
 ### Description
-Its P.A.C.T. for ALL BETHESDA GAMES compatible with Auto-Clean versions of xEdit....!!! Its shaping up that the user may put 1 xEdit Auto-Clean in each ".\Thread" folder, thus enabling dual thread processing of Esps.
+Its P.A.C.T. for ALL BETHESDA GAMES compatible with Auto-Clean versions of xEdit....!!! For those whom may not know, this enables cleaning of Esps that one may have as part of a large mod collection, which in-turn prevents random, crashes and issues, from uncleaned mods. The user may put 1 xEdit Auto-Clean in both ".\Thread#" folder, thus enabling dual-thread parallel processing of Esps, which is necessary for obvious reasons "it takes half the time", but The user may also install only to the first thread folder, in which case it will run in single thread (advised if you only have <50 mods).
 
 ### Preview
 - The new dual-thread version (Yes its 2x faster than P.A.C.T.)...
@@ -76,6 +76,15 @@ Successfully cleaned:
   zzCCAO.esp
 Done:
 ```
+
+### Structure:
+* Program...
+.\OblivionEspCleaner.bat
+.\oec_powershell.ps1
+.\oec_thread1.ps1
+.\oec_thread2.ps1
+.\Thread1\*  <--- Single/First AutoCleaner.exe install
+.\Thread2 \* <--- Second/None AutoCleaner.exe install
 
 ### Plan
 Currently its branded towards the testing platform Oblivion, but for GitHub will be special generic branded one, before that it must work how I want. There will be game braned versions for each game I can cover featured on NexusMods.
