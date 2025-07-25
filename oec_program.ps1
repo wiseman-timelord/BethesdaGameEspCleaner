@@ -1,4 +1,4 @@
-# Updated oec_program.ps1 - Multi-Thread Task Queue Version
+# Updated oec_program.ps1 - Multi-Thread Task Queue Version with PSD1 Integration
 param(
     [int]$ThreadCount = 0  # Will be read from settings file if not provided
 )
@@ -10,7 +10,13 @@ $TempDir = "$ScriptDir\temp"
 $BlackFile = "$ScriptDir\oec_blacklist.txt"
 $ErrorFile = "$ScriptDir\oec_errorlist.txt"
 $SettingsFile = "$ScriptDir\oec_settings.psd1"
-$DataPath = "$ScriptDir\..\Data"
+
+# Initialize settings variables
+$AutoCleanExe = 'TES4EditQuickAutoClean.exe'
+$GameTitle = 'Oblivion'
+$XEditVariant = 'TES4Edit'
+$GameDataPath = $null
+$ScriptDirectory = $null
 
 # Task Queue Files (now in temp folder)
 $TaskQueueFile = "$TempDir\oec_taskqueue.txt"
@@ -34,23 +40,31 @@ function Load-Settings {
         
         if ($settings.ContainsKey('AutoCleanExe')) {
             $script:AutoCleanExe = $settings.AutoCleanExe
-        } else {
-            $script:AutoCleanExe = 'TES4EditQuickAutoClean.exe'
         }
         
         if ($settings.ContainsKey('GameTitle')) {
             $script:GameTitle = $settings.GameTitle
-        } else {
-            $script:GameTitle = 'Oblivion'
         }
         
         if ($settings.ContainsKey('XEditVariant')) {
             $script:XEditVariant = $settings.XEditVariant
+        }
+        
+        if ($settings.ContainsKey('GameDataPath')) {
+            $script:GameDataPath = $settings.GameDataPath
         } else {
-            $script:XEditVariant = 'TES4Edit'
+            # Fallback to relative path if not specified
+            $script:GameDataPath = "$ScriptDir\..\Data"
+        }
+        
+        if ($settings.ContainsKey('ScriptDirectory')) {
+            $script:ScriptDirectory = $settings.ScriptDirectory
+        } else {
+            $script:ScriptDirectory = $ScriptDir
         }
         
         Write-Host "[OK] Settings loaded: $($script:ThreadCount) threads, Game: $($script:GameTitle)" -ForegroundColor Green
+        Write-Host "[OK] Game Data Path: $($script:GameDataPath)" -ForegroundColor Green
         return $true
         
     } catch {
@@ -92,6 +106,9 @@ public static class Pwr {
 "@
     [Pwr]::StayAwake($on)
 }
+
+# REMOVED: Old location validation functions that checked for specific folder structure
+# The program now relies on the psd1 file for all path configuration
 
 function Initialize-TaskQueue($espList) {
     # Ensure temp directory exists
@@ -244,7 +261,7 @@ function Validate-ThreadSetup {
 # MAIN
 Clear-Host
 Write-Separator
-Write-Host "    Oblivion Esp Cleaner (Multi-Thread)" -ForegroundColor Cyan
+Write-Host "    $GameTitle Esp Cleaner (Multi-Thread)" -ForegroundColor Cyan
 Write-Separator
 Write-Host ""
 
@@ -265,6 +282,8 @@ if ($ThreadCount -gt 16) {
 }
 
 Write-Host "[INFO] Configured for $ThreadCount thread(s)" -ForegroundColor Cyan
+Write-Host "[INFO] Game Data Path: $GameDataPath" -ForegroundColor Cyan
+Write-Host "[INFO] Script Directory: $ScriptDirectory" -ForegroundColor Cyan
 
 # Ensure temp directory exists
 if (-not (Test-Path $TempDir)) {
@@ -298,8 +317,15 @@ if (-not (Test-Path $ThreadScript)) {
 CleanOld
 Write-Host "[OK] Blacklist maintenance complete" -ForegroundColor Green
 
-# Scan for ESPs
-$esps = Get-ChildItem "$DataPath\*.esp"
+# Validate GameDataPath exists
+if (-not (Test-Path $GameDataPath)) {
+    Write-Host "[ERROR] Game Data path does not exist: $GameDataPath" -ForegroundColor Red
+    Write-Host "[INFO] Please check your oec_settings.psd1 file" -ForegroundColor Yellow
+    exit 1
+}
+
+# Scan for ESPs using GameDataPath from settings
+$esps = Get-ChildItem "$GameDataPath\*.esp"
 if (!$esps) {
     Write-Host '[ERROR] No ESPs found in Data folder' -ForegroundColor Red
     exit 0
@@ -343,10 +369,11 @@ try {
     # Start all thread jobs
     $jobs = @()
     for ($i = 1; $i -le $ThreadCount; $i++) {
-        $job = Start-Job -ScriptBlock {
-            param($scriptPath, $threadNum, $autoCleanExe)
-            & $scriptPath -ThreadNumber $threadNum -AutoCleanExe $autoCleanExe
-        } -ArgumentList $ThreadScript, $i, $AutoCleanExe
+		$job = Start-Job -ScriptBlock {
+			param($scriptPath, $threadNum, $autoCleanExe, $workDir)
+			Set-Location $workDir
+			& $scriptPath -ThreadNumber $threadNum -AutoCleanExe $autoCleanExe
+		} -ArgumentList (Resolve-Path $ThreadScript), $i, $AutoCleanExe, $ScriptDir
         
         $jobs += @{
             Job = $job

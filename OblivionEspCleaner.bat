@@ -96,14 +96,15 @@ if %ERRORLEVEL% neq 0 (
     goto :MainMenu
 )
 
-:: Verify Data folder
-if not exist "..\Data" (
-    echo [ERROR] Install to %GAME_TITLE%Folder\SomeFolder
-    echo Current location appears incorrect.
+:: Verify GameDataPath from settings (replaces ..\Data check)
+call :CheckGameDataPath
+if %ERRORLEVEL% neq 0 (
+    echo [ERROR] Game data path not found: %GAME_DATA_PATH%
+    echo Please check your %SETTINGS_FILE%.
     pause
     goto :MainMenu
 )
-echo [OK] Data folder found
+echo [OK] Game data folder found
 timeout /t 1 >nul
 
 :: Verify thread installations
@@ -145,13 +146,6 @@ if %PS_EXIT_CODE% neq 0 (
 )
 echo [OK] PowerShell script finished
 timeout /t 1 >nul
-
-:: Credits
-echo.
-echo Thank you for using %GAME_TITLE% Esp Cleaner by Wiseman-Timelord
-echo.
-echo Also Credit to xEdit team for making the backend tool.
-timeout /t 5 >nul
 goto :MainMenu
 
 :Configure
@@ -230,6 +224,29 @@ if not defined THREAD_COUNT (
 set /a "TEST_COUNT=%THREAD_COUNT%" 2>nul
 if %TEST_COUNT% leq 0 (
     echo [ERROR] Invalid ThreadCount in settings: %THREAD_COUNT%
+    exit /b 1
+)
+exit /b 0
+
+:CheckGameDataPath
+:: Read GameDataPath from the settings file
+setlocal enabledelayedexpansion
+set "GAME_DATA_PATH="
+for /f "usebackq tokens=1,2 delims== " %%A in ("%SETTINGS_FILE%") do (
+    if "%%A"=="GameDataPath" (
+        set "TEMP_PATH=%%B"
+        set "TEMP_PATH=!TEMP_PATH: =!"
+        set "TEMP_PATH=!TEMP_PATH:'=!"
+        set "TEMP_PATH=!TEMP_PATH:"=!"
+    )
+)
+endlocal & set "GAME_DATA_PATH=%TEMP_PATH%"
+if not defined GAME_DATA_PATH (
+    echo [ERROR] GameDataPath not found in %SETTINGS_FILE%
+    exit /b 1
+)
+:: Check if the folder exists
+if not exist "%GAME_DATA_PATH%" (
     exit /b 1
 )
 exit /b 0

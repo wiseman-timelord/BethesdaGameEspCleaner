@@ -1,536 +1,419 @@
-#Requires -Version 5.1
-<#
-.SYNOPSIS
-    Oblivion Esp Cleaner configuration installer
-.DESCRIPTION
-    Detects existing threads, downloads/extracts TES4Edit,
-    copies AutoCleaner to thread folders, creates settings
-.NOTES
-    Run from OblivionEspCleaner.bat folder
-#>
+# Updated oec_program.ps1 - Multi-Thread Task Queue Version with PSD1 Integration
+param(
+    [int]$ThreadCount = 0  # Will be read from settings file if not provided
+)
 
-param()
+# CONSTANTS
+$DaysSkip = 7
+$ScriptDir = $PSScriptRoot
+$TempDir = "$ScriptDir\temp"
+$BlackFile = "$ScriptDir\oec_blacklist.txt"
+$ErrorFile = "$ScriptDir\oec_errorlist.txt"
+$SettingsFile = "$ScriptDir\oec_settings.psd1"
 
-$ErrorActionPreference = 'Stop'
-$host.UI.RawUI.WindowTitle = 'Oblivion Esp Cleaner – Configuration'
+# Initialize settings variables
+$AutoCleanExe = 'TES4EditQuickAutoClean.exe'
+$GameTitle = 'Oblivion'
+$XEditVariant = 'TES4Edit'
+$GameDataPath = $null
+$ScriptDirectory = $null
 
-# Constants
-$AutoCleanExe  = 'TES4EditQuickAutoClean.exe'
-$SettingsFile  = 'oec_settings.psd1'
-$MinThreads    = 1
-$MaxThreads    = 4
-$ScriptDir     = $PSScriptRoot
-if (-not $ScriptDir) { $ScriptDir = (Get-Location).Path }
+# Task Queue Files (now in temp folder)
+$TaskQueueFile = "$TempDir\oec_taskqueue.txt"
+$ThreadScript = "$ScriptDir\oec_thread.ps1"  # Single thread script
 
-$TempDir       = Join-Path $ScriptDir 'temp'
-$DownloadDir   = Join-Path $TempDir 'downloads'
-$SevenZipDir   = Join-Path $TempDir '7za'
-$ExtractDir    = Join-Path $TempDir 'TES4Edit'
-$SevenZipUrl   = 'https://7-zip.org/a/7za920.zip'
-$SevenZipExe   = Join-Path $SevenZipDir '7za.exe'
-
-# Global variables
-$Global:CurrentThreadCount = 0
-$Global:AutoCleanerPath = $null
-
-# Functions
-function Write-Banner {
-    Clear-Host
-    '=' * 60
-    '    Oblivion Esp Cleaner – Configuration / Installation'
-    '=' * 60
-    ''
-}
-
-function Get-CurrentThreadCount {
-    $count = 0
-    1..$MaxThreads | ForEach-Object {
-        $tDir = Join-Path $ScriptDir "Thread$_"
-        if (Test-Path $tDir) {
-            $autoCleanPath = Join-Path $tDir $AutoCleanExe
-            if (Test-Path $autoCleanPath) {
-                $count = $_
-                if ($_ -eq 1) {
-                    $Global:AutoCleanerPath = $autoCleanPath
-                }
-            }
-        }
-    }
-    $Global:CurrentThreadCount = $count
-    return $count
-}
-
-function Find-TES4EditArchive {
-    $archives = Get-ChildItem -LiteralPath $ScriptDir -File | Where-Object { $_.Name -like 'TES4Edit*.7z' }
-    if ($archives.Count -eq 0) {
-        return $null
-    } elseif ($archives.Count -eq 1) {
-        return $archives[0].FullName
-    } else {
-        Write-Host "Multiple TES4Edit archives found:" -ForegroundColor Yellow
-        for ($i = 0; $i -lt $archives.Count; $i++) {
-            Write-Host "  $i) $($archives[$i].Name)" -ForegroundColor Yellow
-        }
-        do {
-            $sel = Read-Host "Select archive (0-$(($archives.Count) - 1))"
-            $idx = [int]::TryParse($sel, [ref]$null) ? [int]$sel : -1
-        } while ($idx -lt 0 -or $idx -ge $archives.Count)
-        return $archives[$idx].FullName
-    }
-}
-
-function Download-FileWithRetry {
-    param(
-        [string]$Url,
-        [string]$OutputPath,
-        [int]$MaxRetries = 5
-    )
-    
-    $attempt = 1
-    while ($attempt -le $MaxRetries) {
-        try {
-            Write-Host "[INFO] Download attempt $attempt of $MaxRetries..." -ForegroundColor Cyan
-            
-            # Ensure directory exists
-            $dir = Split-Path $OutputPath -Parent
-            if (-not (Test-Path $dir)) {
-                New-Item -ItemType Directory -Path $dir -Force | Out-Null
-            }
-            
-            # Use WebClient for retries
-            $webClient = New-Object System.Net.WebClient
-            $webClient.Headers.Add('User-Agent', 'OblivionEspCleaner/1.0')
-            $webClient.DownloadFile($Url, $OutputPath)
-            $webClient.Dispose()
-            
-            Write-Host "[OK] Download completed successfully" -ForegroundColor Green
-            return $true
-        }
-        catch {
-            Write-Host "[WARNING] Download attempt $attempt failed: $($_.Exception.Message)" -ForegroundColor Yellow
-            if ($attempt -eq $MaxRetries) {
-                Write-Host "[ERROR] All download attempts failed" -ForegroundColor Red
-                return $false
-            }
-            Start-Sleep -Seconds (2 * $attempt)  # Progressive delay
-            $attempt++
-        }
-    }
-    return $false
-}
-
-function Initialize-SevenZip {
-    if (Test-Path $SevenZipExe) {
-        Write-Host "[INFO] 7za.exe already available" -ForegroundColor Cyan
-        return $true
-    }
-    
-    Write-Host "[INFO] Downloading 7-Zip standalone..." -ForegroundColor Cyan
-    $zipPath = Join-Path $DownloadDir '7za920.zip'
-    
-    if (-not (Download-FileWithRetry -Url $SevenZipUrl -OutputPath $zipPath)) {
+# Load settings from configuration file
+function Load-Settings {
+    if (!(Test-Path $SettingsFile)) {
+        Write-Host "[ERROR] Settings file not found: $SettingsFile" -ForegroundColor Red
+        Write-Host "Please run the configuration script first." -ForegroundColor Yellow
         return $false
     }
     
     try {
-        Write-Host "[INFO] Extracting 7-Zip..." -ForegroundColor Cyan
-        if (-not (Test-Path $SevenZipDir)) {
-            New-Item -ItemType Directory -Path $SevenZipDir -Force | Out-Null
+        $settings = Import-PowerShellDataFile $SettingsFile
+        
+        # Set global variables from settings
+        if ($settings.ContainsKey('ThreadCount') -and $script:ThreadCount -eq 0) {
+            $script:ThreadCount = $settings.ThreadCount
         }
         
-        Add-Type -AssemblyName System.IO.Compression.FileSystem
-        [System.IO.Compression.ZipFile]::ExtractToDirectory($zipPath, $SevenZipDir)
+        if ($settings.ContainsKey('AutoCleanExe')) {
+            $script:AutoCleanExe = $settings.AutoCleanExe
+        }
         
-        if (Test-Path $SevenZipExe) {
-            Write-Host "[OK] 7za.exe ready" -ForegroundColor Green
-            return $true
+        if ($settings.ContainsKey('GameTitle')) {
+            $script:GameTitle = $settings.GameTitle
+        }
+        
+        if ($settings.ContainsKey('XEditVariant')) {
+            $script:XEditVariant = $settings.XEditVariant
+        }
+        
+        if ($settings.ContainsKey('GameDataPath')) {
+            $script:GameDataPath = $settings.GameDataPath
         } else {
-            Write-Host "[ERROR] 7za.exe not found after extraction" -ForegroundColor Red
-            return $false
+            # Fallback to relative path if not specified
+            $script:GameDataPath = "$ScriptDir\..\Data"
         }
-    }
-    catch {
-        Write-Host "[ERROR] Failed to extract 7-Zip: $($_.Exception.Message)" -ForegroundColor Red
+        
+        if ($settings.ContainsKey('ScriptDirectory')) {
+            $script:ScriptDirectory = $settings.ScriptDirectory
+        } else {
+            $script:ScriptDirectory = $ScriptDir
+        }
+        
+        Write-Host "[OK] Settings loaded: $($script:ThreadCount) threads, Game: $($script:GameTitle)" -ForegroundColor Green
+        Write-Host "[OK] Game Data Path: $($script:GameDataPath)" -ForegroundColor Green
+        return $true
+        
+    } catch {
+        Write-Host "[ERROR] Failed to read settings file: $_" -ForegroundColor Red
         return $false
     }
 }
 
-function Extract-TES4EditArchive {
-    param([string]$ArchivePath)
-    
-    if (-not (Initialize-SevenZip)) {
-        return $null
-    }
-    
-    try {
-        Write-Host "[INFO] Extracting TES4Edit archive..." -ForegroundColor Cyan
-        
-        if (Test-Path $ExtractDir) {
-            Remove-Item -Path $ExtractDir -Recurse -Force
-        }
-        New-Item -ItemType Directory -Path $ExtractDir -Force | Out-Null
-        
-        Write-Host "[INFO] Starting extraction process..." -ForegroundColor Cyan
-        Write-Host "[INFO] Archive: $(Split-Path $ArchivePath -Leaf)" -ForegroundColor Gray
-        Write-Host "[INFO] Extract to: $ExtractDir" -ForegroundColor Gray
-        
-        # Format output directory correctly
-        $outputArg = "-o$ExtractDir"
-        
-        Write-Host "[INFO] Command: $SevenZipExe x `"$ArchivePath`" $outputArg -y" -ForegroundColor Gray
-        
-        # Use correct argument format
-        $process = Start-Process -FilePath $SevenZipExe -ArgumentList "x", "`"$ArchivePath`"", $outputArg, "-y" -Wait -PassThru -WindowStyle Hidden
-        
-        # Check exit code
-        if ($process.ExitCode -ne 0) {
-            Write-Host "[ERROR] 7za extraction failed (Exit Code: $($process.ExitCode))" -ForegroundColor Red
-            
-            # Provide specific error info
-            switch ($process.ExitCode) {
-                1 { Write-Host "[ERROR] Warning (Non fatal error(s))" -ForegroundColor Yellow }
-                2 { Write-Host "[ERROR] Fatal error" -ForegroundColor Red }
-                7 { Write-Host "[ERROR] Command line error - check file paths and syntax" -ForegroundColor Red }
-                8 { Write-Host "[ERROR] Not enough memory for operation" -ForegroundColor Red }
-                255 { Write-Host "[ERROR] User stopped the process" -ForegroundColor Red }
-                default { Write-Host "[ERROR] Unknown error code: $($process.ExitCode)" -ForegroundColor Red }
-            }
-            
-            # Debug info
-            Write-Host "[DEBUG] Archive exists: $(Test-Path $ArchivePath)" -ForegroundColor Gray
-            Write-Host "[DEBUG] Archive size: $((Get-Item $ArchivePath).Length) bytes" -ForegroundColor Gray
-            Write-Host "[DEBUG] 7za.exe exists: $(Test-Path $SevenZipExe)" -ForegroundColor Gray
-            Write-Host "[DEBUG] Extract dir exists: $(Test-Path $ExtractDir)" -ForegroundColor Gray
-            Write-Host "[DEBUG] Extract dir writable: $(Test-Path $ExtractDir -PathType Container)" -ForegroundColor Gray
-            
-            return $null
-        }
-        
-        Write-Host "[OK] Archive extraction completed" -ForegroundColor Green
-        
-        # Wait for file system sync
-        Start-Sleep -Milliseconds 500
-        
-        # Verify extraction worked
-        $extractedItems = Get-ChildItem -Path $ExtractDir -Recurse -ErrorAction SilentlyContinue
-        if ($extractedItems.Count -eq 0) {
-            Write-Host "[ERROR] No files found after extraction" -ForegroundColor Red
-            return $null
-        }
-        
-        Write-Host "[INFO] Extracted $($extractedItems.Count) items" -ForegroundColor Cyan
-        Write-Host "[INFO] Searching for $AutoCleanExe..." -ForegroundColor Cyan
-        
-        # Find AutoCleaner in extracted folder
-        $autoCleanFiles = Get-ChildItem -Path $ExtractDir -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq $AutoCleanExe }
-        
-        if ($autoCleanFiles.Count -eq 0) {
-            Write-Host "[ERROR] $AutoCleanExe not found in extracted archive" -ForegroundColor Red
-            Write-Host "[INFO] Available .exe files:" -ForegroundColor Yellow
-            Get-ChildItem -Path $ExtractDir -Recurse -File -Filter "*.exe" | ForEach-Object {
-                Write-Host "  $($_.Name) - $($_.DirectoryName)" -ForegroundColor Gray
-            }
-            Write-Host "[INFO] All files:" -ForegroundColor Yellow
-            Get-ChildItem -Path $ExtractDir -Recurse -File | Select-Object -First 15 | ForEach-Object {
-                Write-Host "  $($_.Name)" -ForegroundColor Gray
-            }
-            return $null
-        }
-        
-        $foundPath = $autoCleanFiles[0].FullName
-        Write-Host "[OK] Found $AutoCleanExe" -ForegroundColor Green
-        Write-Host "[INFO] Full path: $foundPath" -ForegroundColor Cyan
-        return $foundPath
-        
-    }
-    catch {
-        Write-Host "[ERROR] Failed to extract archive: $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host "[ERROR] Stack trace: $($_.ScriptStackTrace)" -ForegroundColor Red
-        return $null
-    }
+# FUNCTIONS
+function Write-Separator {
+    Write-Host ('=' * 79)
 }
 
-function Setup-AutoCleaner {
-    # Check for existing threads
-    $currentThreads = Get-CurrentThreadCount
-    
-    if ($currentThreads -gt 0) {
-        Write-Host "[INFO] Existing installation detected ($currentThreads thread(s))" -ForegroundColor Cyan
-        Write-Host "[INFO] Using existing AutoCleaner from Thread1" -ForegroundColor Cyan
-        return $Global:AutoCleanerPath
-    }
-    
-    # Look for TES4Edit archive
-    Write-Host "[INFO] First-time setup - searching for TES4Edit archive..." -ForegroundColor Cyan
-    $archivePath = Find-TES4EditArchive
-    
-    if (-not $archivePath) {
-        Write-Host "`n[ERROR] No TES4Edit*.7z file found in script directory" -ForegroundColor Red
-        Write-Host "Please download TES4Edit from:" -ForegroundColor Yellow
-        Write-Host "https://www.nexusmods.com/oblivion/mods/11536" -ForegroundColor Yellow
-        Write-Host "`nSave the TES4Edit*.7z file to: $ScriptDir" -ForegroundColor Yellow
-        Write-Host "`nThen re-run this configuration script." -ForegroundColor Yellow
-        Write-Host "`nPress Enter to return to main menu..." -ForegroundColor Gray
-        $null = Read-Host
-        return $null
-    }
-    
-    Write-Host "[OK] Found archive: $(Split-Path $archivePath -Leaf)" -ForegroundColor Green
-    
-    # Extract and find AutoCleaner
-    $extractedPath = Extract-TES4EditArchive -ArchivePath $archivePath
-    if (-not $extractedPath) {
-        return $null
-    }
-    
-    # Create Thread1 and copy executable
-    $thread1Dir = Join-Path $ScriptDir 'Thread1'
-    $thread1AutoCleaner = Join-Path $thread1Dir $AutoCleanExe
-    
-    try {
-        if (-not (Test-Path $thread1Dir)) {
-            New-Item -ItemType Directory -Path $thread1Dir -Force | Out-Null
-        }
-        
-        Copy-Item -Path $extractedPath -Destination $thread1AutoCleaner -Force
-        Write-Host "[OK] Created Thread1 with AutoCleaner" -ForegroundColor Green
-        
-        $Global:AutoCleanerPath = $thread1AutoCleaner
-        $Global:CurrentThreadCount = 1
-        return $thread1AutoCleaner
-        
-    }
-    catch {
-        Write-Host "[ERROR] Failed to setup Thread1: $($_.Exception.Message)" -ForegroundColor Red
-        return $null
-    }
+function CleanOld {
+    if (!(Test-Path $BlackFile)) { return }
+    $cut = (Get-Date).AddDays(-$DaysSkip).ToString('yyyy-MM-dd')
+    (Get-Content $BlackFile) |
+        Where-Object { $_ -match '^(\d{4}-\d{2}-\d{2})' -and $matches[1] -ge $cut } |
+        Set-Content $BlackFile
 }
 
-function Get-ThreadSelection {
-    Write-Host "`nHow many threads to use? (Lower=Stable)" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "1 = Similar speed to P.A.C.T." -ForegroundColor White
-    Write-Host "2 = Whoo that was faster." -ForegroundColor Yellow
-    Write-Host "3 = Impressively super fast." -ForegroundColor Yellow
-    Write-Host "4 = I cant believe it works." -ForegroundColor Red
-    Write-Host "5 = There is no 5, try 4." -ForegroundColor Red
-	Write-Host ""
-    Write-Host "Warning: do not watch processing phase if you suffer from Epilepsy."
-    Write-Host ""
-    
-    do {
-        $selection = Read-Host "Selection; Options 1-4"
-        $threads = [int]::TryParse($selection, [ref]$null) ? [int]$selection : 0
-    } while ($threads -lt 1 -or $threads -gt 4)
-    
-    return $threads
-}
-
-function Configure-ThreadDirectories {
-    param([int]$TargetThreads, [string]$SourceAutoCleanerPath)
-    
-    if (-not (Test-Path $SourceAutoCleanerPath)) {
-        Write-Host "[ERROR] Source AutoCleaner not found: $SourceAutoCleanerPath" -ForegroundColor Red
-        return $false
+function PreventSleep($on) {
+    Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public static class Pwr {
+    [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
+    public static extern void SetThreadExecutionState(uint esFlags);
+    public const uint ES_CONTINUOUS = 0x80000000;
+    public const uint ES_SYSTEM_REQUIRED = 0x00000001;
+    public const uint ES_AWAYMODE_REQUIRED = 0x00000040;
+    public static void StayAwake(bool on) {
+        if (on)
+            SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_AWAYMODE_REQUIRED);
+        else
+            SetThreadExecutionState(ES_CONTINUOUS);
     }
-    
-    $success = 0
-    
-    # FIRST: Remove extra thread directories BEFORE creating new ones
-    # This prevents the bug where we accidentally remove a thread we just created
-    if ($TargetThreads -lt $MaxThreads) {
-        ($TargetThreads + 1)..$MaxThreads | ForEach-Object {
-            $threadNum = $_
-            $threadDir = Join-Path $ScriptDir "Thread$threadNum"
-            if (Test-Path $threadDir) {
-                try {
-                    Remove-Item -Path $threadDir -Recurse -Force
-                    Write-Host "  [OK] Removed Thread$threadNum" -ForegroundColor Cyan
-                }
-                catch {
-                    Write-Host "  [WARNING] Failed to remove Thread${threadNum}: $($_.Exception.Message)" -ForegroundColor Yellow
-                }
-            }
-        }
-    }
-    
-    # SECOND: Create required thread directories
-    1..$TargetThreads | ForEach-Object {
-        $threadNum = $_
-        $threadDir = Join-Path $ScriptDir "Thread$threadNum"
-        $threadAutoClean = Join-Path $threadDir $AutoCleanExe
-        
-        try {
-            if (-not (Test-Path $threadDir)) {
-                New-Item -ItemType Directory -Path $threadDir -Force | Out-Null
-            }
-            
-            if ($threadNum -eq 1 -and (Test-Path $threadAutoClean)) {
-                # Thread1 already exists
-                Write-Host "  [OK] Thread1 (existing)" -ForegroundColor Green
-            } else {
-                Copy-Item -Path $SourceAutoCleanerPath -Destination $threadAutoClean -Force
-                Write-Host "  [OK] Thread$threadNum configured" -ForegroundColor Green
-            }
-            $success++
-        }
-        catch {
-            Write-Host "  [ERROR] Thread${threadNum}: $($_.Exception.Message)" -ForegroundColor Red
-        }
-    }
-    
-    return ($success -eq $TargetThreads)
-}
-
-function New-SettingsFile {
-    param([int]$ThreadCount, [string]$AutoCleanerPath)
-    
-    $content = @"
-# Oblivion Esp Cleaner Settings
-# Auto-generated configuration file
-
-@{
-    ThreadCount = $ThreadCount
-    AutoCleanExe = '$AutoCleanExe'
-    AutoCleanerPath = '$AutoCleanerPath'
-    GameTitle = 'Oblivion'
-    XEditVariant = 'TES4Edit'
-    Version = '1.0'
-    LastConfigured = '$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss'))'
-    ScriptDirectory = '$ScriptDir'
 }
 "@
-    try {
-        $settingsPath = Join-Path $ScriptDir $SettingsFile
-        $content | Out-File -FilePath $settingsPath -Encoding utf8
-        Write-Host "[OK] Settings file created: $SettingsFile" -ForegroundColor Green
-        return $true
+    [Pwr]::StayAwake($on)
+}
+
+# REMOVED: Old location validation functions that checked for specific folder structure
+# The program now relies on the psd1 file for all path configuration
+
+function Initialize-TaskQueue($espList) {
+    # Ensure temp directory exists
+    if (-not (Test-Path $TempDir)) {
+        New-Item -ItemType Directory -Path $TempDir | Out-Null
     }
-    catch {
-        Write-Host "[ERROR] Failed to create settings file: $($_.Exception.Message)" -ForegroundColor Red
-        return $false
+
+    # Create task queue with all ESPs
+    $taskQueue = @()
+    for ($i = 0; $i -lt $espList.Count; $i++) {
+        $taskQueue += "TASK:${i}:$($espList[$i])"
+    }
+    $taskQueue | Out-File $TaskQueueFile -Encoding UTF8
+    
+    # Clear any existing status/progress files for all possible threads (cleanup)
+    for ($i = 1; $i -le 16; $i++) {  # Clean up to 16 possible thread files
+        $statusFile = "$TempDir\oec_status$i.txt"
+        $progressFile = "$TempDir\oec_progress$i.txt"
+        if (Test-Path $statusFile) { Remove-Item $statusFile }
+        if (Test-Path $progressFile) { Remove-Item $progressFile }
     }
 }
 
-function Test-Installation {
-    param([int]$ExpectedThreads)
-    
-    $ok = $true
-    Write-Host "`n" + '=' * 60
-    Write-Host "    Installation Report"
-    Write-Host '=' * 60
+function Get-ThreadStatus($threadNum) {
+    $statusFile = "$TempDir\oec_status$threadNum.txt"
+    if (Test-Path $statusFile) {
+        return (Get-Content $statusFile -Raw).Trim()
+    }
+    return "UNKNOWN"
+}
 
-    # Settings file
-    $settingsPath = Join-Path $ScriptDir $SettingsFile
-    if (Test-Path $settingsPath) {
-        Write-Host "[OK] Settings file: $SettingsFile" -ForegroundColor Green
-        try {
-            $settings = Import-PowerShellDataFile -Path $settingsPath
-            Write-Host "[OK] Configured threads: $($settings.ThreadCount)" -ForegroundColor Green
-            if ($settings.AutoCleanerPath) {
-                Write-Host "[OK] AutoCleaner source: $(Split-Path $settings.AutoCleanerPath -Leaf)" -ForegroundColor Green
+function Get-ThreadProgress($threadNum) {
+    $progressFile = "$TempDir\oec_progress$threadNum.txt"
+    if (Test-Path $progressFile) {
+        $content = Get-Content $progressFile -ErrorAction SilentlyContinue
+        if ($content -and $content[-1] -match "COMPLETED:(\d+)") {
+            return [int]$matches[1]
+        }
+    }
+    return 0
+}
+
+function Wait-ForThreadsToComplete($totalTasks) {
+    $lastProgressArray = @(0) * ($ThreadCount + 1)  # Index 0 unused, 1-N for threads
+    $startTime = Get-Date
+    $timeoutMinutes = 60
+    
+    Write-Host "Monitoring $ThreadCount thread(s) progress..." -ForegroundColor Yellow
+    
+    do {
+        Start-Sleep -Seconds 2
+        
+        # Check for timeout
+        $elapsedMinutes = ((Get-Date) - $startTime).TotalMinutes
+        if ($elapsedMinutes -gt $timeoutMinutes) {
+            Write-Host "Processing timeout reached ($timeoutMinutes minutes). Stopping..." -ForegroundColor Red
+            break
+        }
+        
+        # Check all thread statuses and progress
+        $allFinished = $true
+        $totalCompleted = 0
+        $progressChanged = $false
+        
+        for ($i = 1; $i -le $ThreadCount; $i++) {
+            $status = Get-ThreadStatus $i
+            $progress = Get-ThreadProgress $i
+            
+            # Cap progress at total tasks
+            $progress = [Math]::Min($progress, $totalTasks)
+            $totalCompleted += $progress
+            
+            if ($progress -ne $lastProgressArray[$i]) {
+                $progressChanged = $true
+                $lastProgressArray[$i] = $progress
+            }
+            
+            if ($status -ne "FINISHED") {
+                $allFinished = $false
             }
         }
-        catch {
-            Write-Host "[ERROR] Failed to read settings: $($_.Exception.Message)" -ForegroundColor Red
-            $ok = $false
+        
+        # Cap total completed
+        $totalCompleted = [Math]::Min($totalCompleted, $totalTasks)
+        
+        # Display progress if changed
+        if ($progressChanged) {
+            $progressDisplay = @()
+            for ($i = 1; $i -le $ThreadCount; $i++) {
+                $progressDisplay += "T$i=$($lastProgressArray[$i])"
+            }
+            $progressStr = $progressDisplay -join ", "
+            Write-Host "$progressStr, Total=$totalCompleted/$totalTasks" -ForegroundColor Gray
         }
-    }
-    else {
-        Write-Host "[ERROR] Settings file missing" -ForegroundColor Red
-        $ok = $false
-    }
+        
+        # Check completion conditions
+        $allTasksCompleted = ($totalCompleted -ge $totalTasks)
+        
+        if ($allTasksCompleted -and -not $allFinished) {
+            Write-Host "All tasks completed but threads still running. Waiting for cleanup..." -ForegroundColor Yellow
+            Start-Sleep -Seconds 5
+            # Re-check statuses
+            $allFinished = $true
+            for ($i = 1; $i -le $ThreadCount; $i++) {
+                if ((Get-ThreadStatus $i) -ne "FINISHED") {
+                    $allFinished = $false
+                    break
+                }
+            }
+        }
+        
+    } while (-not ($allFinished -or $allTasksCompleted))
+    
+    Write-Host "All threads completed!" -ForegroundColor Green
+    return $totalCompleted
+}
 
-    # Thread directories
-    $actual = 0
-    1..$MaxThreads | ForEach-Object {
-        $threadPath = Join-Path $ScriptDir "Thread$_"
-        $autoCleanPath = Join-Path $threadPath $AutoCleanExe
-        if (Test-Path $autoCleanPath) {
-            Write-Host "[OK] Thread$_ : Ready" -ForegroundColor Green
-            $actual = $_
+function Validate-ThreadSetup {
+    $missingThreads = @()
+    $validThreads = 0
+    
+    for ($i = 1; $i -le $ThreadCount; $i++) {
+        $threadDir = "$ScriptDir\Thread$i"
+        $threadExe = "$threadDir\$AutoCleanExe"
+        
+        if (-not (Test-Path $threadDir)) {
+            Write-Host "[ERROR] Thread$i directory missing: $threadDir" -ForegroundColor Red
+            $missingThreads += $i
+            continue
+        }
+        
+        if (-not (Test-Path $threadExe)) {
+            Write-Host "[ERROR] Thread$i executable missing: $threadExe" -ForegroundColor Red
+            $missingThreads += $i
+        } else {
+            $validThreads++
         }
     }
     
-    Write-Host "[INFO] Active threads: $actual" -ForegroundColor Cyan
-
-    if ($ok -and $actual -eq $ExpectedThreads) { 
-        Write-Host "`n[SUCCESS] Installation completed successfully!" -ForegroundColor Green 
+    if ($missingThreads.Count -gt 0) {
+        Write-Host "[ERROR] Missing thread installations: Thread$($missingThreads -join ', Thread')" -ForegroundColor Red
+        Write-Host "[INFO] Please run the configuration script to fix this issue." -ForegroundColor Yellow
+        return $false
     }
-    elseif ($actual -gt 0) {     
-        Write-Host "`n[WARNING] Installation completed with $actual of $ExpectedThreads threads" -ForegroundColor Yellow 
-    }
-    else {
-        Write-Host "`n[ERROR] Installation failed" -ForegroundColor Red
-    }
-
-    return $ok
+    
+    Write-Host "[OK] All $ThreadCount thread directories validated" -ForegroundColor Green
+    return $true
 }
 
-function Cleanup-TempFiles {
-    if (Test-Path $TempDir) {
-        try {
-            Remove-Item -Path $TempDir -Recurse -Force
-            Write-Host "[INFO] Temporary files cleaned up" -ForegroundColor Cyan
-        }
-        catch {
-            Write-Host "[WARNING] Could not clean up temp files: $($_.Exception.Message)" -ForegroundColor Yellow
-        }
-    }
+# MAIN
+Clear-Host
+Write-Separator
+Write-Host "    $GameTitle Esp Cleaner (Multi-Thread)" -ForegroundColor Cyan
+Write-Separator
+Write-Host ""
+
+# Load settings first
+if (-not (Load-Settings)) {
+    exit 1
 }
 
-# Main execution
+# Validate thread count
+if ($ThreadCount -lt 1) {
+    Write-Host "[ERROR] Thread count must be at least 1" -ForegroundColor Red
+    exit 1
+}
+
+if ($ThreadCount -gt 16) {
+    Write-Host "[WARNING] Thread count limited to 16 maximum" -ForegroundColor Yellow
+    $ThreadCount = 16
+}
+
+Write-Host "[INFO] Configured for $ThreadCount thread(s)" -ForegroundColor Cyan
+Write-Host "[INFO] Game Data Path: $GameDataPath" -ForegroundColor Cyan
+Write-Host "[INFO] Script Directory: $ScriptDirectory" -ForegroundColor Cyan
+
+# Ensure temp directory exists
+if (-not (Test-Path $TempDir)) {
+    New-Item -ItemType Directory -Path $TempDir | Out-Null
+}
+
+# Clean up old task queue files
+$filesToClean = @($TaskQueueFile)
+for ($i = 1; $i -le 16; $i++) {
+    $filesToClean += "$TempDir\oec_status$i.txt"
+    $filesToClean += "$TempDir\oec_progress$i.txt"
+}
+
+foreach ($file in $filesToClean) {
+    if (Test-Path $file) { Remove-Item $file -ErrorAction SilentlyContinue }
+}
+
+# Validate thread setup
+if (-not (Validate-ThreadSetup)) {
+    Write-Host "[ERROR] Thread validation failed. Please run configuration script." -ForegroundColor Red
+    exit 1
+}
+
+# Verify thread script exists
+if (-not (Test-Path $ThreadScript)) {
+    Write-Host "[ERROR] Thread script not found: $ThreadScript" -ForegroundColor Red
+    exit 1
+}
+
+# Clean old blacklist entries
+CleanOld
+Write-Host "[OK] Blacklist maintenance complete" -ForegroundColor Green
+
+# Validate GameDataPath exists
+if (-not (Test-Path $GameDataPath)) {
+    Write-Host "[ERROR] Game Data path does not exist: $GameDataPath" -ForegroundColor Red
+    Write-Host "[INFO] Please check your oec_settings.psd1 file" -ForegroundColor Yellow
+    exit 1
+}
+
+# Scan for ESPs using GameDataPath from settings
+$esps = Get-ChildItem "$GameDataPath\*.esp"
+if (!$esps) {
+    Write-Host '[ERROR] No ESPs found in Data folder' -ForegroundColor Red
+    exit 0
+}
+Write-Host "[OK] Found $($esps.Count) ESP files" -ForegroundColor Green
+
+# Load blacklist
+$black = @{}
+if (Test-Path $BlackFile) {
+    Get-Content $BlackFile | ForEach-Object {
+        if ($_ -match '^(\d{4}-\d{2}-\d{2})\t(.+)\t') {
+            $black[$matches[2]] = [DateTime]::ParseExact($matches[1], 'yyyy-MM-dd', $null)
+        }
+    }
+    Write-Host "[OK] Loaded $($black.Count) blacklist entries" -ForegroundColor Green
+} else {
+    Write-Host "[OK] No existing blacklist found" -ForegroundColor Green
+}
+
+# Filter ESPs to process
+$cut = (Get-Date).AddDays(-$DaysSkip)
+$todo = $esps | Where-Object { !$black.ContainsKey($_.Name) -or $black[$_.Name] -lt $cut }
+
+if (!$todo) {
+    Write-Host '[INFO] All ESPs skipped by blacklist' -ForegroundColor Cyan
+    exit 0
+}
+
+$skipped = $esps.Count - $todo.Count
+Write-Host "[OK] Processing $($todo.Count) ESPs (skipped $skipped)" -ForegroundColor Green
+
+# Initialize task queue system
+Initialize-TaskQueue $todo.FullName
+Write-Host "[OK] Task queue initialized with $($todo.Count) tasks" -ForegroundColor Green
+
+Write-Host ""
+Write-Host "Starting task queue processing with $ThreadCount thread(s)..." -ForegroundColor Yellow
+
+PreventSleep($true)
 try {
-    Write-Banner
-
-    # Setup AutoCleaner from existing or archive
-    $autoCleanerPath = Setup-AutoCleaner
-    if (-not $autoCleanerPath) {
-        return  # Error already displayed
+    # Start all thread jobs
+    $jobs = @()
+    for ($i = 1; $i -le $ThreadCount; $i++) {
+		$job = Start-Job -ScriptBlock {
+			param($scriptPath, $threadNum, $autoCleanExe, $workDir)
+			Set-Location $workDir
+			& $scriptPath -ThreadNumber $threadNum -AutoCleanExe $autoCleanExe
+		} -ArgumentList (Resolve-Path $ThreadScript), $i, $AutoCleanExe, $ScriptDir
+        
+        $jobs += @{
+            Job = $job
+            ThreadNumber = $i
+        }
+        
+        Write-Host "[INFO] Started Thread $i (Job ID: $($job.Id))" -ForegroundColor Gray
     }
 
-    # Get user thread selection
-    $targetThreads = Get-ThreadSelection
+    # Monitor threads and wait for completion
+    $completedTasks = Wait-ForThreadsToComplete $todo.Count
 
-    Write-Host "`n[INFO] Configuration Summary:" -ForegroundColor Cyan
-    Write-Host "  Source executable: $(Split-Path $autoCleanerPath -Leaf)"
-    Write-Host "  Current threads: $Global:CurrentThreadCount"
-    Write-Host "  Target threads: $targetThreads"
-    Write-Host "  Thread directories: Thread1..Thread$targetThreads"
+    Write-Host "`nFinal Results:" -ForegroundColor Green
+    Write-Host "Tasks completed: $completedTasks/$($todo.Count)" -ForegroundColor Green
 
-    $confirm = Read-Host "`nProceed with configuration? (Y/n)"
-    if ($confirm -match '^n') { 
-        Cleanup-TempFiles
-        return 
+    # Display job outputs
+    foreach ($jobInfo in $jobs) {
+        $output = Receive-Job $jobInfo.Job -ErrorAction SilentlyContinue
+        if ($output) {
+            Write-Host "`nThread $($jobInfo.ThreadNumber) Messages:" -ForegroundColor Cyan
+            $output | ForEach-Object { Write-Host "  $_" }
+        }
     }
 
-    # Configure thread directories
-    Write-Host "`n[INFO] Configuring thread directories..." -ForegroundColor Cyan
-    if (-not (Configure-ThreadDirectories -TargetThreads $targetThreads -SourceAutoCleanerPath $autoCleanerPath)) {
-        Write-Host "[ERROR] Failed to configure all thread directories" -ForegroundColor Red
-        Read-Host "`nPress Enter to return to main menu"
-        return
+    # Clean up jobs
+    foreach ($jobInfo in $jobs) {
+        Remove-Job $jobInfo.Job -Force -ErrorAction SilentlyContinue
     }
 
-    # Create settings file
-    if (-not (New-SettingsFile -ThreadCount $targetThreads -AutoCleanerPath $autoCleanerPath)) {
-        Write-Host "[ERROR] Failed to create settings file" -ForegroundColor Red
-        Read-Host "`nPress Enter to return to main menu"
-        return
+    Write-Host "`nMulti-thread task queue processing completed!" -ForegroundColor Green
+} catch {
+    Write-Host "ERROR: Processing failed: $_" -ForegroundColor Red
+    exit 1
+} finally {
+    PreventSleep($false)
+    
+    # Clean up task queue files
+    $filesToClean | ForEach-Object {
+        if (Test-Path $_) { Remove-Item $_ -ErrorAction SilentlyContinue }
     }
-
-    # Verify installation
-    $null = Test-Installation -ExpectedThreads $targetThreads
-
-    # Cleanup temp files
-    Cleanup-TempFiles
-
-    Write-Host "`nPress Enter to return to main menu..." -ForegroundColor Gray
-    $null = Read-Host
 }
-catch {
-    Write-Host "`n[ERROR] $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host "Stack trace: $($_.ScriptStackTrace)" -ForegroundColor Red
-    Cleanup-TempFiles
-    Read-Host "`nPress Enter to return to main menu"
-}
+
+exit 0
