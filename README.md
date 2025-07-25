@@ -56,7 +56,8 @@ Thread1 = 7, Thread2 = 4, Completed/Total = 11/49
 ```
 
 ### Installation & Instructions
-``` 1. Download and Extract the BethesdaGameEspCleaner release into a subfolder of your game directory (e.g. `C:\Games\Oblivion\BethesdaGameEspCleaner\`).
+```
+1. Download and Extract the BethesdaGameEspCleaner release into a subfolder of your game directory (e.g. `C:\Games\Oblivion\BethesdaGameEspCleaner\`).
 2. Download the latest TES4Edit `.7z` from [Nexus Mods](https://www.nexusmods.com/oblivion/mods/11536) and place it in the same folder as the program files.
 3. Ensure structure looks like:
 
