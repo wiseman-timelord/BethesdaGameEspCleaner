@@ -2,6 +2,7 @@
 param(
     [int]$ThreadCount = 0  # Will be read from settings file if not provided
 )
+Write-Host "[THREAD$ThreadNumber] Working directory: $(Get-Location)"
 
 # CONSTANTS
 $DaysSkip = 7
