@@ -10,6 +10,7 @@ A multi-threaded ESP cleaning utility similar to the concept of "P.A.C.T" for Fa
 * Error logging and real-time progress
 * Automatic xEdit setup on first run
 * Designed for future multi-game support
+* Will run from, game subfolder or custom location.
 
 ### Preview
 - In Dual-Thread mode (sensible number)...
@@ -61,14 +62,9 @@ Thread1 = 7, Thread2 = 4, Completed/Total = 11/49
 2. Download the latest TES4Edit `.7z` from [Nexus Mods](https://www.nexusmods.com/oblivion/mods/11536) and place it in the same folder as the program files.
 3. Ensure structure looks like:
 
-   Oblivion\
-   ├── Data\
-   └── BethesdaGameEspCleaner\
-       ├── BethesdaGameEspCleaner.bat
-       ├── oec_installer.ps1
-       ├── oec_program.ps1
-       ├── oec_thread.ps1
-       └── TES4Edit*.7z
+  **BethesdaGame**EspCleaner\
+  ├── **BethesdaGame**EspCleaner.bat
+  └── TES4Edit*.7z
 
 4. Run Setup by launching the `.bat` file as Administrator → select option `2` to extract TES4Edit, set up thread folders, and generate config → choose 1–4 threads based on your system.
 - It will download the portable `7za.exe` from the official `7z` site, in order to extract the `TES4Edit*.7z` file, obviously it needs to do that.
