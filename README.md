@@ -76,6 +76,7 @@ Thread1 = 7, Thread2 = 4, Completed/Total = 11/49
 ### Notation
 - This version is configured for **The Elder Scrolls IV: Oblivion**, but, can be adapted for and will be released on, other xEdit-Autoclean supported games like Skyrim, Fallout 3, and New Vegas.
 - Done so far for, [Oblivion](https://www.nexusmods.com/oblivion/mods/55417).
+- "Ello NexusMods its ME"
 
 ### Warnings
 - **Epilepsy** - Processing phase involves repeating open/close of full-screen tool."
