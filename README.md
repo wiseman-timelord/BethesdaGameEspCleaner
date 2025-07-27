@@ -78,5 +78,11 @@ Thread1 = 7, Thread2 = 4, Completed/Total = 11/49
 - Done so far for, [Oblivion](https://www.nexusmods.com/oblivion/mods/55417).
 - "Ello NexusMods its ME"
 
+### Development
+To achieve the dream of having a esp cleaner on each of the bethesda games that support it on nexus...
+- I would need to possibly convert it all over to python, just to pass the scanner thing? It seems to reject my powershell every time. 
+- Sending people here with links would be confusing, suggesting versions of a program, that were branded towards a specific game, while main files unavailable.
+- Is it still necessary to auto-blacklist certain files? These may have been fixed by xedit team, especially on older games? or we would have to check the mentioned side-effects, AI research may be inadequate to find fixed bugs for autoloot.
+
 ### Warnings
 - **Epilepsy** - Processing phase involves repeating open/close of full-screen tool."
