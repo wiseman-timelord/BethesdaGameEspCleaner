@@ -179,7 +179,6 @@ while ($true) {
         $ok = Clean $esp
         if ($ok) {
             $successful++
-            Write-Host "[THREAD$ThreadNumber] SUCCESS: $name" -ForegroundColor Green
         } else {
             $failed++
             Write-Host "[THREAD$ThreadNumber] FAILED: $name" -ForegroundColor Red

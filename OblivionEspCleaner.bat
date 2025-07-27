@@ -165,7 +165,7 @@ if %ERRORLEVEL% neq 0 (
 :: Run PowerShell installer
 echo [INFO] Launching PowerShell installer...
 echo.
-"%PSCMD%" -NoP -EP Bypass -File "%INSTALLER_SCRIPT%"
+"%PSCMD%" -NoP -EP Bypass -File ".\oec_installer.ps1"
 
 goto :MainMenu
 
