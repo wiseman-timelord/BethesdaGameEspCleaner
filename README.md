@@ -88,7 +88,7 @@ Multi-thread task queue processing completed!
 ### Notation
 - This version is configured for **The Elder Scrolls IV: Oblivion**, but, can be adapted for and will be released on, other xEdit-Autoclean supported games like Skyrim, Fallout 3, and New Vegas.
 - Done so far for, [Oblivion](https://www.nexusmods.com/oblivion/mods/55417).
-- It should be possible to edit the psd1 to have more threads, then manually setup the additional folders. I would not advise more than 4, as it is untested, and I dont want to risk breaking something. Do so at your own risk.
+- It should be possible to edit the psd1 to have more threads, then manually setup the additional folders. I would not advise more than 4, as it is untested, and it may introducing additional processing issues, or worse break something.
 
 ### Development
 - To achieve the dream of having a esp cleaner on each of the bethesda games that support it on nexus is not possible due to powershell script rejection, but, would I want anything other than powershell handling the parallel batches? 
