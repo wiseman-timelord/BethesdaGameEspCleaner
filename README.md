@@ -13,7 +13,7 @@ A multi-threaded ESP cleaning utility similar to the concept of "P.A.C.T" for Fa
 * Will run from, game subfolder or custom location.
 
 ### Preview
-- In Dual-Thread mode (sensible number)...
+- In Dual-Thread mode...
 ```
 ===============================================================================
     Oblivion Esp Cleaner
