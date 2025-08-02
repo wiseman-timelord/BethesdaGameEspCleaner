@@ -336,7 +336,7 @@ Write-Host "[OK] Found $($esps.Count) ESP files" -ForegroundColor Green
 $black = @{}
 if (Test-Path $BlackFile) {
     Get-Content $BlackFile | ForEach-Object {
-        if ($_ -match '^(\d{4}-\d{2}-\d{2})\t(.+)\t') {
+        if ($_ -match '^(\d{4}-\d{2}-\d{2})\t([^\t]+)\t') {
             $black[$matches[2]] = [DateTime]::ParseExact($matches[1], 'yyyy-MM-dd', $null)
         }
     }
@@ -404,6 +404,8 @@ try {
     }
 
     Write-Host "`nMulti-thread task queue processing completed!" -ForegroundColor Green
+    Write-Host "`nPress any key to continue..." -ForegroundColor Cyan
+    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
 } catch {
     Write-Host "ERROR: Processing failed: $_" -ForegroundColor Red
     exit 1
