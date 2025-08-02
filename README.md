@@ -1,4 +1,4 @@
-# BethesdaGameEspCleaner
+# BethesdaGameEspCleaner provisionally named "Oblivion Esp Cleaner"
 **Status:** Beta
 
 ### Description
@@ -91,7 +91,7 @@ Multi-thread task queue processing completed!
 
 ### Development
 - To achieve the dream of having a esp cleaner on each of the bethesda games that support it on nexus is not possible due to powershell script rejection, but, would I want anything other than powershell handling the parallel batches? 
-- Alternates would be; to make it a do all bethesda games that have autoclean, type of thing, that would be excellent, but only present in Oblivion..I would need to possibly convert it all over to python, just to pass the scanner. 
+- Alternates would be; to make it a do all bethesda games that have autoclean, type of thing, that would be excellent, but only present in Oblivion. I could convert it all over to python, then release individually, but this makes no sense because Nexus are not allowing me access to main account. 
 - Sending people here with links would be confusing, suggesting versions of a program, that were branded towards a specific game, while main files unavailable.
 - Is it still necessary to auto-blacklist certain files? These may have been fixed by xedit team, especially on older games? or we would have to check the mentioned side-effects, AI research may be inadequate to find fixed bugs for autoloot.
 
