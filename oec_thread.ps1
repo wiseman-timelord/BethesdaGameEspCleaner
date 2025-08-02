@@ -127,7 +127,6 @@ function Clean($esp) {
         $psi.CreateNoWindow         = $true
         $psi.WorkingDirectory       = Split-Path $CleanerExe
 
-        Write-Host "[THREAD$ThreadNumber] Starting xEdit for $(Split-Path $esp -Leaf)" -ForegroundColor Gray
         $p = [System.Diagnostics.Process]::Start($psi)
         $p.WaitForExit(300000)   # 5 min timeout
         if (!$p.HasExited) {
@@ -174,7 +173,6 @@ while ($true) {
         }
 
         $name = Split-Path $esp -Leaf
-        Write-Host "[THREAD$ThreadNumber] Processing $name" -ForegroundColor White
 
         $ok = Clean $esp
         if ($ok) {
