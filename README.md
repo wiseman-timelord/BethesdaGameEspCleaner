@@ -27,17 +27,26 @@ Using 2 thread(s) for processing
 [OK] Task queue initialized with 49 tasks
 
 Starting task queue processing with 2 thread(s)...
-Monitoring thread progress...
-Thread1 = 2, Thread2 = 0, Completed/Total = 2/49
-Thread1 = 2, Thread2 = 2, Completed/Total = 4/49
-Thread1 = 3, Thread2 = 2, Completed/Total = 5/49
-Thread1 = 3, Thread2 = 3, Completed/Total = 6/49
-Thread1 = 4, Thread2 = 3, Completed/Total = 7/49
-Thread1 = 4, Thread2 = 4, Completed/Total = 8/49
-Thread1 = 5, Thread2 = 4, Completed/Total = 9/49
-Thread1 = 6, Thread2 = 4, Completed/Total = 10/49
-Thread1 = 7, Thread2 = 4, Completed/Total = 11/49
 ...
+
+...
+Final Results:
+Tasks completed: 185/185
+[THREAD1] *** thread started ***
+[THREAD1] Beginning task processing...
+[THREAD1] FINISHED: 46 ok, 0 failed (total 46)
+[THREAD2] *** thread started ***
+[THREAD2] Beginning task processing...
+[THREAD2] TIMEOUT on LINK.esp
+[THREAD2] FINISHED: 32 ok, 0 failed (total 32)
+[THREAD3] *** thread started ***
+[THREAD3] Beginning task processing...
+[THREAD3] FINISHED: 42 ok, 0 failed (total 42)
+[THREAD4] *** thread started ***
+[THREAD4] Beginning task processing...
+[THREAD4] FINISHED: 65 ok, 0 failed (total 65)
+
+Multi-thread task queue processing completed!
 ```
 
 ### Structure:
