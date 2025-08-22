@@ -18,7 +18,7 @@ $host.UI.RawUI.WindowTitle = 'Oblivion Esp Cleaner – Configuration'
 $AutoCleanExe  = 'TES4EditQuickAutoClean.exe'
 $SettingsFile  = 'oec_settings.psd1'
 $MinThreads    = 1
-$MaxThreads    = 4
+$MaxThreads    = 6
 
 # Validate script directory - MUST be explicitly detected, no defaults
 $ScriptDir = $PSScriptRoot
@@ -839,4 +839,5 @@ catch {
     Write-Host "Stack trace: $($_.ScriptStackTrace)" -ForegroundColor Red
     Cleanup-TempFiles
     Read-Host "`nPress Enter to return to main menu"
+
 }
